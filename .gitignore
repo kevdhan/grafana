@@ -81,6 +81,9 @@ public/css/*.min.css
 .devcontainer/
 .claude/
 
+# Claude skills everyone should have
+!.claude/skills/add-e2e-selectors
+
 .eslintcache
 .stylelintcache
 
