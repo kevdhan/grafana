@@ -25,22 +25,19 @@ This demo answers all three across **two Explore use cases**:
 
 ## Preflight
 
-1. `./scripts/demos/setup.sh explore-trace` (or via `/kev-demo-grafana-explore-trace-start`) — creates `demo/explore-trace`; profile `setup.sh` starts/provisions Prometheus and warms Go modules when `:3000` is cold. **Run unsandboxed** (`required_permissions: ["all"]`) so it can reach Docker (see Data source note).
-2. **PATH** — `go version` / `node -v` (often need `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"`)
-3. **Reuse if healthy** — `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/login` → `200` means skip restart
-4. Else warm + start:
+1. `./scripts/demos/setup.sh explore-trace` (or via `/kev-demo-grafana-explore-trace-start`) — creates `demo/explore-trace`; profile `setup.sh` **plants UC2**, starts/provisions Prometheus, starts/verifies traffic when `:3000` is up, and prints a `=== DEMO READINESS ===` gate. **Run unsandboxed** (`required_permissions: ["all"]`) so it can reach Docker (see Data source note).
+2. **Follow the readiness gate** — do not hand-plant `limitSeries.ts` or invent server starts. If `status: NOT READY`, start only the missing backend/frontend as durable Cursor background shells (`block_until_ms: 0`, `exec …`), then re-run `./scripts/demos/explore-trace/setup.sh`. **Never** use `nohup … &` in a one-shot Shell (process group dies when the Shell exits).
+3. **PATH** — `go version` / `node -v` (often need `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"`)
+4. **Reuse if healthy** — readiness `login: OK` means skip restart
+5. Else warm + start (durable background shells only):
    - Pin durable Go caches if agent Shell sandboxed them (`GOMODCACHE=$HOME/go/pkg/mod`, `GOCACHE=$HOME/Library/Caches/go-build`); prefer unsandboxed Shell for download/build
-   - `go mod download` (wait; retry once on proxy timeout)
-   - Frontend: `yarn start` — **must run outside the Cursor sandbox** (`required_permissions: ["all"]`). Sandboxed, FSEvents is blocked and webpack floods `EMFILE: too many open files, watch`, killing the watcher in ~10s. Don't try `CHOKIDAR_USEPOLLING=true` (this repo's chokidar crashes with `ERR_INVALID_ARG_TYPE`); and `unset` any polling env vars since agent Shell env persists across calls.
-   - Backend: if recent `bin/grafana` exists → `./bin/grafana server -profile -profile-addr=127.0.0.1 -profile-port=6000 -packaging=dev cfg:app_mode=development` (build once with `go build -o bin/grafana ./pkg/cmd/grafana`); else non-race `go run ./pkg/cmd/grafana -- server -packaging=dev cfg:app_mode=development`  
-     Or `make run`. **Avoid** `make run-go` (hardcodes `-race`, slow cold compile)
-5. **Health gate** — do not start product beats until `/login` is `200` (frontend compile alone is not enough)
-6. **Error data is auto-generated per demo run.** When Grafana is up, `setup.sh` starts a **continuous** background traffic generator (`seed-traffic.sh --watch`, pid in `.demo-traffic.pid`) that curls Grafana to produce a steady status-code mix on its own `grafana_http_request_duration_seconds_count` metric (scraped as `job="grafana"`): steady 200s plus **401** (auth failures) and 404s. No extra container. `reset.sh` stops it.
-   - **⚠ 401s come from *unauthenticated* requests, NOT wrong passwords.** The generator hits an auth-required endpoint with no credentials (`curl http://localhost:3000/api/admin/settings`, no `-u`) — that returns 401 without counting as a failed login. Do **not** generate 401s with `curl -u admin:wrongpass …`: repeated bad-password attempts trip Grafana's brute-force login protection and **lock the admin account (~5 min)**, which blocks `admin:admin` everywhere (UI + API) and breaks the whole demo. If admin login ever gets locked, stop the failing requests and wait ~5 min (the lockout auto-clears).
-   - **Why continuous, not one-shot:** scraped metrics (memory, `up`, request counts) are already generated continuously by the running stack, but the 401/404 *error* signal only exists while we generate it — a one-shot burst decays out of `rate()[5m]` in ~5 min. The watcher keeps 401/404 fresh so **any** time window (5m / 15m / 60m) shows the spike.
-   - If setup ran before Grafana was up (so it couldn't start), start it manually (unsandboxed): `./scripts/demos/explore-trace/seed-traffic.sh --watch &` — or a one-shot burst right before the beat: `./scripts/demos/explore-trace/seed-traffic.sh`.
-7. Plugin version-compat log noise is OK if `/login` is 200
-8. Know shortcuts: Agents Window (`Cmd+Shift+P` → “Open Agents Window”); Design Mode `Cmd+Shift+D`
+   - Frontend: `yarn start` — **must run outside the Cursor sandbox**. Don't try `CHOKIDAR_USEPOLLING=true`; `unset` polling env vars.
+   - Backend: prefer `./bin/grafana server …` when present; else non-race `go run …`. **Avoid** `make run-go` (hardcodes `-race`).
+6. **Health gate** — do not start product beats until readiness says `READY` (`/login` 200 + UC2 plant)
+7. **Error data is auto-generated.** Profile setup starts `seed-traffic.sh --watch` when Grafana is up (pid in `.demo-traffic.pid`; soft-curl so a Grafana restart does not kill the watcher). `reset.sh` stops it.
+   - **⚠ 401s come from *unauthenticated* requests, NOT wrong passwords.** Never `curl -u admin:wrongpass` (locks admin ~5 min).
+8. Plugin version-compat log noise is OK if `/login` is 200
+9. Know shortcuts: Agents Window (`Cmd+Shift+P` → “Open Agents Window”); Design Mode `Cmd+Shift+D`
 
 ### Data source (Prometheus strongly preferred, TestData fallback)
 
@@ -266,7 +263,7 @@ The “No data” state for an empty Prometheus **graph** query is rendered by t
 
 ## Use Case 2 — Data looks wrong → find & fix a bug with Cursor
 
-A planted, safe, reversible bug (it lives on the `demo/explore-trace` branch and is discarded by reset). This is where Cursor **Agent** root-causes and fixes a real defect, with a **failing unit test** as the reproducible artifact.
+A planted, safe, reversible bug (**auto-planted by `plant-uc2.sh` during profile setup**; discarded by `unplant-uc2.sh` / reset). This is where Cursor **Agent** root-causes and fixes a real defect, with a **failing unit test** as the reproducible artifact.
 
 > **This bug is an intentional demo artifact** — say so out loud so nobody thinks Grafana ships it.
 

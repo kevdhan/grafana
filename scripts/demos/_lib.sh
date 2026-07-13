@@ -206,6 +206,13 @@ demo_ensure_prometheus() {
     demo_warn "Docker not found — skipping Prometheus; demo will use TestData fallback"
     return 1
   fi
+  # Cursor agent sandbox blocks the Docker socket: `docker` exists but `docker info`
+  # fails → we'd otherwise falsely fall back to TestData. Detect that explicitly.
+  if ! docker info >/dev/null 2>&1; then
+    demo_warn "docker binary found but 'docker info' failed (often Cursor sandbox blocking the socket)."
+    demo_warn "Re-run setup UNSANDBOXED: required_permissions:[\"all\"]. Falling back to TestData for now."
+    return 1
+  fi
   demo_log "Starting local Prometheus (make devenv sources=prometheus)…"
   require_repo_root
   if ! make devenv sources=prometheus; then
@@ -213,6 +220,7 @@ demo_ensure_prometheus() {
     return 1
   fi
   # Give the container a few seconds to answer /-/healthy.
+  # Cold image builds can take ~1 min; callers should re-run setup once up.
   local elapsed=0
   while (( elapsed < 30 )); do
     if demo_prometheus_ok; then
@@ -222,7 +230,7 @@ demo_ensure_prometheus() {
     sleep 2
     elapsed=$((elapsed + 2))
   done
-  demo_warn "Prometheus did not become healthy within 30s; falling back to TestData"
+  demo_warn "Prometheus did not become healthy within 30s (cold build?); re-run setup once container is up. Falling back to TestData for now."
   return 1
 }
 
@@ -282,19 +290,67 @@ demo_traffic_pidfile() {
   echo "${REPO_ROOT}/.demo-traffic.pid"
 }
 
-# Start the continuous traffic generator in the background (idempotent).
+demo_traffic_logfile() {
+  echo "${REPO_ROOT}/.demo-traffic.log"
+}
+
+# Returns 0 if the traffic generator pidfile points at a live process.
+demo_traffic_ok() {
+  local pidfile pid
+  pidfile="$(demo_traffic_pidfile)"
+  [[ -f "${pidfile}" ]] || return 1
+  pid="$(cat "${pidfile}" 2>/dev/null || true)"
+  [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+}
+
+# Returns 0 if a frontend webpack/nx watcher looks alive (best-effort; macOS pgrep).
+demo_frontend_watcher_ok() {
+  pgrep -f 'nx run grafana:start|webpack|webpack-cli' >/dev/null 2>&1
+}
+
+# Start the continuous traffic generator in the background (idempotent + verified).
+# Survives Grafana blips (seed-traffic soft_curl) and stale pidfiles.
 demo_start_traffic() {
   local script="${DEMOS_ROOT}/explore-trace/seed-traffic.sh"
-  local pidfile
+  local pidfile logfile
   pidfile="$(demo_traffic_pidfile)"
+  logfile="$(demo_traffic_logfile)"
   [[ -f "${script}" ]] || return 0
-  if [[ -f "${pidfile}" ]] && kill -0 "$(cat "${pidfile}" 2>/dev/null)" 2>/dev/null; then
+
+  if demo_traffic_ok; then
     demo_log "Traffic generator already running (pid $(cat "${pidfile}"))"
     return 0
   fi
-  nohup bash "${script}" --watch >/dev/null 2>&1 &
+  # Stale pidfile from a previous dead process.
+  rm -f "${pidfile}"
+
+  # Launch via a subshell + nohup so the watcher outlives setup.sh.
+  # Log to .demo-traffic.log (gitignored via .demo-traffic.pid pattern? add log to gitignore).
+  # shellcheck disable=SC2086
+  nohup bash "${script}" --watch 12 >>"${logfile}" 2>&1 &
   echo $! >"${pidfile}"
-  demo_log "Started continuous traffic generator (pid $!) — keeps 200/401/404 fresh for 5m/15m/60m windows"
+  # Give it a moment; verify it stayed up (catches instant set -e deaths).
+  sleep 1
+  if demo_traffic_ok; then
+    demo_log "Started continuous traffic generator (pid $(cat "${pidfile}")) — keeps 200/401/404 fresh for 5m/15m/60m windows"
+    return 0
+  fi
+  demo_warn "Traffic generator failed to stay up — see ${logfile}"
+  rm -f "${pidfile}"
+  return 1
+}
+
+# Ensure traffic is running when Grafana is up; restart if the pidfile is stale.
+demo_ensure_traffic() {
+  if ! demo_login_ok; then
+    demo_log "Grafana not up yet — skip traffic until /login → 200, then re-run profile setup.sh"
+    return 1
+  fi
+  if demo_traffic_ok; then
+    demo_log "Traffic generator healthy (pid $(cat "$(demo_traffic_pidfile)"))"
+    return 0
+  fi
+  demo_start_traffic
 }
 
 # Stop the continuous traffic generator (used by reset).
@@ -308,6 +364,53 @@ demo_stop_traffic() {
     kill "${pid}" 2>/dev/null && demo_log "Stopped traffic generator (pid ${pid})"
   fi
   rm -f "${pidfile}"
+}
+
+# Print a machine-readable readiness gate for the agent skill. Exit 0 only when
+# the minimum bar for live beats is met (login + UC2 plant). Frontend/traffic
+# are reported but do not fail the gate alone — the skill restarts them.
+demo_print_readiness() {
+  local login="FAIL" prom="n/a" traffic="FAIL" frontend="FAIL" uc2="FAIL"
+  local ready=1
+
+  if demo_login_ok; then login="OK"; else ready=0; fi
+  if demo_prometheus_ok; then prom="OK"; elif [[ -f "$(demo_datasource_file)" ]]; then prom="DOWN"; else prom="TestData"; fi
+  if demo_traffic_ok; then traffic="OK"; fi
+  if demo_frontend_watcher_ok; then frontend="OK"; fi
+  if [[ -f "${REPO_ROOT}/public/app/features/explore/Graph/limitSeries.ts" ]] \
+    && grep -q "data.length : 1" "${REPO_ROOT}/public/app/features/explore/Graph/limitSeries.ts" 2>/dev/null \
+    && grep -q "limitSeriesForDisplay" "${REPO_ROOT}/public/app/features/explore/Graph/GraphContainer.tsx" 2>/dev/null; then
+    uc2="OK"
+  else
+    ready=0
+  fi
+
+  echo ""
+  echo "=== DEMO READINESS ==="
+  echo "login:     ${login}   (need /login → 200)"
+  echo "prometheus:${prom}   (OK preferred; TestData = degraded UC1)"
+  echo "frontend:  ${frontend}   (yarn/webpack watcher for Design Mode HMR)"
+  echo "traffic:   ${traffic}   (401/404 spike for UC1 reveal)"
+  echo "uc2-plant: ${uc2}   (limitSeries.ts cap=1 + GraphContainer wired)"
+  if [[ "${ready}" == "1" ]]; then
+    echo "status:    READY — proceed to Beat 1 (/explore)"
+  else
+    echo "status:    NOT READY — agent must start missing servers as durable Cursor"
+    echo "           background shells (block_until_ms:0, required_permissions:[\"all\"]),"
+    echo "           then re-run: ./scripts/demos/explore-trace/setup.sh"
+    echo "           Do NOT use \`nohup … &\` in a one-shot Shell — the process group dies"
+    echo "           when that Shell exits. Prefer:"
+    if [[ "${login}" != "OK" ]]; then
+      echo "             Backend:  ./bin/grafana server -profile -profile-addr=127.0.0.1 -profile-port=6000 -packaging=dev cfg:app_mode=development"
+      echo "                       (or: go run ./pkg/cmd/grafana -- server -packaging=dev cfg:app_mode=development)"
+    fi
+    if [[ "${frontend}" != "OK" ]]; then
+      echo "             Frontend: unset CHOKIDAR_USEPOLLING CHOKIDAR_INTERVAL WATCHPACK_POLLING; yarn start"
+    fi
+  fi
+  echo "=== END READINESS ==="
+  echo ""
+  return $((1 - ready))
 }
 
 # Best-effort: ask a running Grafana to reload datasource provisioning.

@@ -57,96 +57,111 @@ Agent `Shell` calls run **sandboxed by default**, which silently breaks three th
 
 | Task | Sandboxed symptom | Fix |
 |------|-------------------|-----|
-| Anything Docker (`setup.sh`, `docker …`, `make devenv`) | Docker socket blocked → "Docker not found" → **false TestData fallback** | Run unsandboxed |
+| Anything Docker (`setup.sh`, `docker …`, `make devenv`) | Docker socket blocked → `docker info` fails → **false TestData fallback** | Run unsandboxed |
 | Frontend `yarn start` | FSEvents blocked → `EMFILE: too many open files` → watcher dies in ~10s | Run unsandboxed |
 | `go mod download` / backend build | `GOMODCACHE`/`GOCACHE` redirected to a temp sandbox cache → re-downloads | Run unsandboxed (or pin `$HOME` caches) |
+| Long-lived servers via `nohup … &` in a one-shot Shell | Process group dies when the Shell tool exits → `/login` flips to `000`, traffic pid goes stale | Use Cursor **background** shells (`block_until_ms: 0`) with `exec` |
 
 Also: **exported env vars persist across `Shell` calls** in a session — a stray `CHOKIDAR_USEPOLLING`/`WATCHPACK_POLLING` will poison later `yarn start` restarts. `unset` them.
 
-## Steps
+## Agent startup contract (do not improvise)
 
-### 1. Setup (new branch)
+Setup is automated. **Do not** hand-plant UC2, dig through agent transcripts, or invent server-start sequences. Follow this loop until the readiness gate says `READY`:
+
+### 1. Run setup (unsandboxed)
 
 ```sh
 ./scripts/demos/setup.sh explore-trace
+# recreate: add --force
 ```
 
-Optional: `--force` (recreate), `--from <base-branch>` (default `main`).
+Profile `scripts/demos/explore-trace/setup.sh` runs automatically and now:
 
-Confirm output shows branch `demo/explore-trace` and `.demo-state` written.
+1. **Plants UC2** via `plant-uc2.sh` (copies fixtures → `limitSeries.ts` + failing test, wires `GraphContainer.tsx`, re-breaks the cap to `1` if a prior Agent fix left it green)
+2. Ensures Prometheus (or TestData fallback) + datasource provisioning
+3. Starts/verifies the **traffic** generator when `/login` is already 200 (and survives Grafana blips — soft curl)
+4. Prints a final **`=== DEMO READINESS ===`** block
 
-Then run profile preflight (prints checklist):
+### 2. Parse the readiness gate
+
+Read the setup stdout block:
+
+```
+=== DEMO READINESS ===
+login:     OK|FAIL
+prometheus:OK|DOWN|TestData
+frontend:  OK|FAIL
+traffic:   OK|FAIL
+uc2-plant: OK|FAIL
+status:    READY|NOT READY
+=== END READINESS ===
+```
+
+- **`status: READY`** (and `uc2-plant: OK`, `login: OK`) → skip to Beat 1. Do not restart healthy servers.
+- **`status: NOT READY`** → go to step 3. Do **not** explore the repo looking for missing files — setup already told you what failed.
+
+### 3. Start only what the gate says is missing (durable shells)
+
+If `login: FAIL` and/or `frontend: FAIL`, start them as **separate Cursor background shells**:
+
+- `required_permissions: ["all"]`
+- `block_until_ms: 0`
+- Prefer `exec …` so the process is the shell’s main PID
 
 ```sh
-# invoked automatically by top-level setup when present; safe to re-run:
+# Backend (prefer bin/grafana when present)
+export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"
+unset CHOKIDAR_USEPOLLING CHOKIDAR_INTERVAL WATCHPACK_POLLING
+exec ./bin/grafana server -profile -profile-addr=127.0.0.1 -profile-port=6000 -packaging=dev cfg:app_mode=development
+# else: exec go run ./pkg/cmd/grafana -- server -packaging=dev cfg:app_mode=development
+```
+
+```sh
+# Frontend
+export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"
+unset CHOKIDAR_USEPOLLING CHOKIDAR_INTERVAL WATCHPACK_POLLING
+exec yarn start
+```
+
+**Never** start backend/frontend with `nohup … &` inside a one-shot Shell — that was the main failure mode that made `/login` flip to `000` mid-demo.
+
+Await `/login → 200` (and webpack “Compiled” for HMR), then **re-run**:
+
+```sh
 ./scripts/demos/explore-trace/setup.sh
 ```
 
-Read `scripts/demos/explore-trace/NOTES.md` and follow its beats/prompts.
+That re-attaches traffic, re-verifies the UC2 plant, and reprints the gate. Loop until `READY`.
 
-#### Data source: Prometheus (preferred) / TestData (fallback)
+### 4. What setup owns (so you don't)
 
-The profile `setup.sh` auto-selects the data source. **Prometheus is strongly preferred** — the 2 a.m. on-call story only feels real when a genuine PromQL query returns empty. Renaming TestData to look like Prometheus is dishonest; don't.
+| Concern | Owner | Notes |
+|---------|-------|-------|
+| UC2 `limitSeries.ts` plant (cap=`1`) + failing test + `GraphContainer` wire | `plant-uc2.sh` via profile setup | Fixtures live under `scripts/demos/explore-trace/fixtures/` |
+| UC2 cleanup on teardown | `unplant-uc2.sh` via profile reset | Also covered by `--save-kit` product discard |
+| Traffic generator | `demo_ensure_traffic` | Soft-curl so Grafana restarts don't kill `--watch` |
+| Prometheus vs TestData | `demo_ensure_prometheus` | Warns on sandboxed Docker socket |
+| Readiness summary | `demo_print_readiness` | Agent parses this; don't reinvent checks |
 
-- **Docker available** → starts a local Prometheus (`localhost:9090`) via `make devenv sources=prometheus` and provisions it as the default datasource (`conf/provisioning/datasources/demo-explore-trace.yaml`, gitignored).
-  - **CRITICAL — run `setup.sh` OUTSIDE the Cursor sandbox** (`required_permissions: ["all"]`). The sandbox blocks the Docker socket, so `docker info` fails and setup **wrongly falls back to TestData even though Docker Desktop is running**. This was the single biggest source of confusion — always shell out unsandboxed for anything Docker.
-  - **Basic auth:** the devenv Prometheus block (`web.yml`) requires `admin`/`admin`. `demo_prometheus_ok` and the provisioned datasource both send those creds; a hand-rolled datasource without `basicAuth: true` gets **401** and "fails" silently.
-  - **First-run timing:** `make devenv sources=prometheus` builds several images (~1 min cold). The 30s health poll can expire mid-build → TestData fallback. Just **re-run `./scripts/demos/explore-trace/setup.sh`** once the container is up; it takes the fast reuse path and provisions the datasource (backend reload API, no restart needed).
-  - Prometheus is a container independent of the git branch, so it's **reused across iterations** and left running by `reset.sh` (fast next spinup).
-  - Verify end-to-end: `curl -s -u admin:admin http://localhost:3000/api/datasources/uid/demo-explore-trace-prom/health` → `"status":"OK"`.
-- **Docker genuinely absent** → falls back to **TestData → No Data Points**. Setup never fails on this; the Run → `/api/ds/query` → Go path is identical either way. Say so out loud rather than pretending it's Prometheus.
+### Data source notes (Prometheus preferred)
 
-### 2. Ensure servers (fast spinup)
+- **Always run setup unsandboxed** so Docker works. Sandbox → false TestData fallback.
+- Basic auth on devenv Prometheus: `admin`/`admin`.
+- Cold devenv build ~1 min; if 30s poll expires → TestData; **re-run profile setup** once `:9090` is healthy.
+- Verify: `curl -s -u admin:admin http://localhost:3000/api/datasources/uid/demo-explore-trace-prom/health` → `"status":"OK"`.
 
-Do **not** jump to Explore / Ask / Design Mode until `/login` returns **200**. Frontend compile alone is not enough.
+### Traffic / 401 safety
 
-#### Fast spinup sequence
+- 401s come from **unauthenticated** requests (`curl` with no `-u`), **never** `admin:wrongpass` (locks admin ~5 min).
+- Continuous `--watch` keeps `rate()[5m|15m|60m]` fresh; one-shot bursts decay.
 
-1. **PATH** — verify `go version` and `node -v`. On this machine, local toolchains live under `~/.local`:
-   ```sh
-   export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"
-   ```
-2. **Reuse if healthy** — if `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/login` is `200` and yarn HMR is up, **skip restart**. Do not kill a mid-start backend (wastes `go mod download` progress).
-3. **Warm modules** (cold machine only):
-   ```sh
-   # From agent Shell: use durable caches (sandbox may redirect under /var/folders/.../cursor-sandbox-cache/)
-   export GOMODCACHE="${GOMODCACHE:-$HOME/go/pkg/mod}"
-   export GOCACHE="${GOCACHE:-$HOME/Library/Caches/go-build}"
-   go mod download   # wait for completion; retry once on proxy.golang.org timeout
-   ```
-   Prefer `required_permissions: ["all"]` (unsandboxed) for `go mod download` / backend build so caches stick.
-4. **Start frontend + backend** (separate terminals):
-   - Frontend: `yarn start` (required for Design Mode HMR)
-   - Backend — prefer **non-race** for demos (faster first compile):
-     - **Fastest restart** when `bin/grafana` exists and is recent (`bin/` is gitignored):
-       ```sh
-       go build -o bin/grafana ./pkg/cmd/grafana   # once after a successful non-race build
-       ./bin/grafana server -profile -profile-addr=127.0.0.1 -profile-port=6000 -packaging=dev cfg:app_mode=development
-       ```
-     - Else:
-       ```sh
-       go run ./pkg/cmd/grafana -- server -packaging=dev cfg:app_mode=development
-       ```
-     Or `make run` (Air). Race is opt-in via `.go-race-enabled-locally` / `GO_RACE`.
-   - **Avoid** `make run-go` for demos: it **hardcodes `-race`**, which makes cold compiles much slower. (`GO_RACE_FLAG` elsewhere does not apply to `run-go`.)
-   - **Frontend watcher must run OUTSIDE the Cursor sandbox** (`required_permissions: ["all"]`). Inside the sandbox macOS FSEvents is blocked, so webpack falls back to per-file `fs.watch` and dies within ~10s with thousands of `EMFILE: too many open files, watch` (and the ts-checker crash). Do **not** work around it with `CHOKIDAR_USEPOLLING=true` — this repo's chokidar throws `ERR_INVALID_ARG_TYPE` (undefined interval) and kills `yarn start`. Also note exported env vars persist across agent Shell calls, so a stray `CHOKIDAR_USEPOLLING` will poison later restarts — `unset` it. A clean unsandboxed `yarn start` compiles in ~4s and reports `No typescript errors found`.
-5. **Healthy check** — poll until ready before continuing:
-   ```sh
-   curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/login   # expect 200
-   ```
-   Profile `setup.sh` / `_lib.sh` helpers: `demo_login_ok`, `demo_wait_for_login`, `demo_warm_go_modules`.
-6. **Error data (for UC1) is auto-generated per demo.** When Grafana is up, `setup.sh` starts a **continuous** background generator (`seed-traffic.sh --watch`, pid in `.demo-traffic.pid`; `reset.sh` stops it) that curls Grafana to produce a status-code mix on its own `grafana_http_request_duration_seconds_count` (scraped as `job="grafana"`): steady 200s plus a **401** spike and 404s. No extra container.
-   - **⚠ 401s come from *unauthenticated* requests, NOT wrong passwords.** The generator hits an auth-required endpoint with no creds (`curl http://localhost:3000/api/admin/settings`, no `-u`) — that returns 401 without counting as a failed login. Never generate 401s with `curl -u admin:wrongpass …`: repeated bad-password attempts trip Grafana's brute-force login protection and **lock the admin account (~5 min)**, blocking `admin:admin` everywhere (UI + API) and breaking the whole demo. If admin login ever locks, stop the failing requests and wait ~5 min (the lockout auto-clears).
-   - **Continuous, not one-shot:** scraped metrics (memory, `up`) are generated continuously by the running stack, but the 401/404 error signal only exists while we generate it — a one-shot burst decays out of `rate()[5m]` in ~5 min. The watcher keeps it fresh so **any** window (5m/15m/60m) shows the spike. 5xx can't be forced on Grafana, so the story uses a 4xx (401 auth) spike after a deploy.
-   - If setup ran before Grafana was up, start it manually **unsandboxed** (`required_permissions: ["all"]`): `./scripts/demos/explore-trace/seed-traffic.sh --watch &` (or a one-shot `./scripts/demos/explore-trace/seed-traffic.sh` right before the beat).
+### Backend tips
 
-#### Backend cold-start notes
-
-- Cold `go mod download` / `proxy.golang.org` timeouts can stall for minutes before Grafana listens on `:3000`.
-- Cursor agent Shell may sandbox `GOMODCACHE` / `GOCACHE` under `/var/folders/.../cursor-sandbox-cache/` — set durable `$HOME` caches (or reuse a warm sandbox cache) and prefer unsandboxed Shell for downloads/builds.
-- Prefer `./bin/grafana server …` over `go run` / `make run-go` when a recent `bin/grafana` exists.
-- Plugin installer may log version-compat errors (e.g. “not compatible with your Grafana version: 9.2.0”) — **harmless** for this empty-state demo if `/login` is 200.
+- Prefer `./bin/grafana server …` when present; avoid `make run-go` (`-race`, slow cold compile).
+- Plugin version-compat log noise is OK if `/login` is 200.
 - Login: `admin` / `admin`.
+
+Read `scripts/demos/explore-trace/NOTES.md` for talk track / prompts after `READY`.
 
 ## Use Case 1 — No data → diagnose & fix the query (Steps 3–6)
 

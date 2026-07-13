@@ -128,9 +128,11 @@ cat <<EOF
 
 Next:
   1. Use the matching Cursor skill (or /kev-demo-kit) for the talk track
-  2. Fast spinup: reuse :3000 if /login is 200; else go mod download → yarn start + non-race backend
-     (prefer: go run ./pkg/cmd/grafana -- server -packaging=dev cfg:app_mode=development)
-     Avoid make run-go (hardcodes -race). Gate on /login → 200 before demo beats.
+  2. Read the profile setup's === DEMO READINESS === block:
+     - READY → proceed to live beats
+     - NOT READY → start missing backend/frontend as durable Cursor background
+       shells (block_until_ms:0, exec …; never nohup in a one-shot Shell), then
+       re-run: ./scripts/demos/<demo-id>/setup.sh
   3. After the customer session: ./scripts/demos/reset.sh
 
 EOF

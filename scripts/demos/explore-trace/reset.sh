@@ -22,6 +22,12 @@ echo "→ (explore-trace) demo-specific reset"
 # Stop the background traffic generator started by setup.
 demo_stop_traffic
 
+# Remove UC2 plant (untracked limitSeries* + GraphContainer restore) so files
+# do not leak onto main when the operator skips --save-kit / --clean-untracked.
+if [[ -x "${SCRIPT_DIR}/unplant-uc2.sh" ]]; then
+  "${SCRIPT_DIR}/unplant-uc2.sh" || demo_warn "unplant-uc2 exited non-zero"
+fi
+
 demo_remove_prometheus_datasource
 # If Grafana is up, reload so the provisioned datasource is dropped now
 # (otherwise it lingers until the next backend restart).

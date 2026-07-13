@@ -47,7 +47,7 @@ If `.demo-state` is missing, there's nothing to reset — say so and stop.
 
 ### 2. Run reset — DEFAULT is `--save-kit` (unsandboxed)
 
-**Always reset with `--save-kit` unless the user explicitly asks otherwise.** It is the standard teardown for this demo: it commits the reusable kit (`scripts/demos`, `.cursor/skills`, demo-safety rule, `.gitignore`) onto the base branch as a **local** commit, then discards the live product changes under `public/app` / `pkg` — so kit work is never lost and the Explore/panel UI + planted bug are always reset. It also **stops the background traffic generator** (`.demo-traffic.pid`) and **removes the provisioned Prometheus datasource** (leaving the Prometheus container running for a fast next spinup).
+**Always reset with `--save-kit` unless the user explicitly asks otherwise.** It is the standard teardown for this demo: it commits the reusable kit (`scripts/demos`, `.cursor/skills`, demo-safety rule, `.gitignore`) onto the base branch as a **local** commit, then discards the live product changes under `public/app` / `pkg` — so kit work is never lost and the Explore/panel UI + planted bug are always reset. It also **stops the background traffic generator** (`.demo-traffic.pid`), **unplants UC2** (`unplant-uc2.sh` removes `limitSeries*` + restores `GraphContainer.tsx`), and **removes the provisioned Prometheus datasource** (leaving the Prometheus container running for a fast next spinup).
 
 Run with `required_permissions: ["all"]` (so it can reach Docker for the datasource reload and manage processes):
 
