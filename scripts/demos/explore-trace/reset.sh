@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # explore-trace: demo-specific teardown.
-#   - Removes the provisioned Prometheus datasource (gitignored, disposable).
-#   - Leaves the Prometheus container RUNNING by default so the next demo
-#     iteration is fast (reuse-first). Pass --stop-deps for a cold teardown.
+#   - Stops traffic + Grafana backend/frontend by default (so the *next* Cursor
+#     chat's start skill relaunches them → native terminals in that chat).
+#   - Leaves the Prometheus container RUNNING by default (fast reuse).
+#   - Pass --keep-servers to leave FE/BE up (same-chat iteration).
+#   - Pass --stop-deps for a cold teardown (also stop Prometheus/devenv).
 # Branch + .demo-state cleanup is handled by top-level scripts/demos/reset.sh.
 set -euo pipefail
 
@@ -11,9 +13,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../_lib.sh"
 
 STOP_DEPS=0
+KEEP_SERVERS=0
 for arg in "$@"; do
   case "${arg}" in
     --stop-deps) STOP_DEPS=1 ;;
+    --keep-servers) KEEP_SERVERS=1 ;;
   esac
 done
 
@@ -29,9 +33,16 @@ if [[ -x "${SCRIPT_DIR}/unplant-uc2.sh" ]]; then
 fi
 
 demo_remove_prometheus_datasource
-# If Grafana is up, reload so the provisioned datasource is dropped now
+# Reload while Grafana is still up so the provisioned datasource is dropped now
 # (otherwise it lingers until the next backend restart).
 demo_reload_datasource_provisioning
+
+# Default: stop FE/BE so the next chat owns fresh terminals. Prometheus stays.
+if [[ "${KEEP_SERVERS}" == "1" ]]; then
+  demo_log "Leaving Grafana backend/frontend running (--keep-servers)"
+else
+  demo_stop_grafana_servers
+fi
 
 if [[ "${STOP_DEPS}" == "1" ]]; then
   if command -v docker >/dev/null 2>&1; then

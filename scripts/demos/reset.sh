@@ -12,6 +12,7 @@ source "${SCRIPT_DIR}/_lib.sh"
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [--save-kit] [--force] [--keep-branch] [--clean-untracked]
+                        [--keep-servers] [--stop-deps]
 
 Reads .demo-state, checks out the base branch, deletes the local demo branch
 (unless --keep-branch), and clears demo state.
@@ -27,6 +28,10 @@ Options:
   --clean-untracked  Also run git clean -fd (destructive — removes untracked
                      files/dirs). Requires --force. Use rarely.
   --keep-branch      Do not delete the local demo/<id> branch
+  --keep-servers     Forwarded to profile reset: leave Grafana FE/BE running
+                     (default profile reset stops them so the next chat owns
+                     fresh terminals). Prometheus still left up unless --stop-deps.
+  --stop-deps        Forwarded to profile reset: also stop Prometheus/devenv
   -h, --help         Show this help
 EOF
 }
@@ -35,6 +40,8 @@ FORCE=0
 KEEP_BRANCH=0
 CLEAN_UNTRACKED=0
 SAVE_KIT=0
+KEEP_SERVERS=0
+STOP_DEPS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -43,6 +50,8 @@ while [[ $# -gt 0 ]]; do
     --keep-branch) KEEP_BRANCH=1; shift ;;
     --clean-untracked) CLEAN_UNTRACKED=1; shift ;;
     --save-kit) SAVE_KIT=1; shift ;;
+    --keep-servers) KEEP_SERVERS=1; shift ;;
+    --stop-deps) STOP_DEPS=1; shift ;;
     *) demo_die "Unknown flag: $1" ;;
   esac
 done
@@ -58,8 +67,15 @@ demo_log "Active demo: ${DEMO_ID} on ${DEMO_BRANCH} (base ${BASE_BRANCH})"
 
 PROFILE_DIR="${DEMOS_ROOT}/${DEMO_ID}"
 if [[ -x "${PROFILE_DIR}/reset.sh" ]]; then
-  demo_log "Running demo-specific reset: ${PROFILE_DIR}/reset.sh"
-  "${PROFILE_DIR}/reset.sh" || demo_warn "Demo-specific reset exited non-zero"
+  PROFILE_ARGS=()
+  [[ "${KEEP_SERVERS}" == "1" ]] && PROFILE_ARGS+=(--keep-servers)
+  [[ "${STOP_DEPS}" == "1" ]] && PROFILE_ARGS+=(--stop-deps)
+  demo_log "Running demo-specific reset: ${PROFILE_DIR}/reset.sh${PROFILE_ARGS[*]:+ ${PROFILE_ARGS[*]}}"
+  if [[ ${#PROFILE_ARGS[@]} -gt 0 ]]; then
+    "${PROFILE_DIR}/reset.sh" "${PROFILE_ARGS[@]}" || demo_warn "Demo-specific reset exited non-zero"
+  else
+    "${PROFILE_DIR}/reset.sh" || demo_warn "Demo-specific reset exited non-zero"
+  fi
 fi
 
 # --save-kit: preserve reusable kit changes on the base branch, then discard

@@ -39,6 +39,7 @@ echo ""
 
 if demo_login_ok; then
   demo_log "Grafana already healthy on :3000 (/login → 200) — reuse; do not restart"
+  demo_record_grafana_server_pids || true
   demo_ensure_traffic || true
 else
   demo_log "Grafana not ready on :3000 — warming modules before any backend start"
@@ -50,7 +51,7 @@ else
   demo_backend_cmd_hint | sed 's/^/     /'
   echo "  3. Wait until: curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login → 200"
   echo "     (Frontend 'Compiled successfully' alone is NOT enough.)"
-  echo "  4. Re-run this script to attach traffic + re-print the readiness gate:"
+  echo "  4. Re-run this script to record server pids, attach traffic + re-print the readiness gate:"
   echo "       ./scripts/demos/explore-trace/setup.sh"
   echo ""
 fi

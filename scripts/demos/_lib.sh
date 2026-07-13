@@ -366,6 +366,106 @@ demo_stop_traffic() {
   rm -f "${pidfile}"
 }
 
+# --- Grafana backend / frontend (chat-scoped; stopped on reset by default) ---
+#
+# Cursor agent terminals are tied to the chat that started them. Leaving FE/BE
+# up after reset means the *next* chat's start skill reuses invisible processes
+# and never opens native terminals. So default reset stops them; Prometheus
+# (Docker) stays up for fast reuse. Pass --keep-servers to opt out (same-chat
+# iteration).
+
+demo_backend_pidfile() { echo "${REPO_ROOT}/.demo-backend.pid"; }
+demo_frontend_pidfile() { echo "${REPO_ROOT}/.demo-frontend.pid"; }
+
+# Kill a pid and its descendants (best-effort). Clears the pidfile.
+demo_kill_pidfile_tree() {
+  local pidfile="$1"
+  local label="$2"
+  [[ -f "${pidfile}" ]] || return 0
+  local pid
+  pid="$(cat "${pidfile}" 2>/dev/null || true)"
+  rm -f "${pidfile}"
+  [[ -n "${pid}" ]] || return 0
+  if ! kill -0 "${pid}" 2>/dev/null; then
+    return 0
+  fi
+  # Children first, then root.
+  local kids
+  kids="$(pgrep -P "${pid}" 2>/dev/null || true)"
+  local k
+  for k in ${kids}; do
+    # Recurse one level via a nested kill of each child's tree
+    local grand
+    grand="$(pgrep -P "${k}" 2>/dev/null || true)"
+    local g
+    for g in ${grand}; do
+      kill "${g}" 2>/dev/null || true
+    done
+    kill "${k}" 2>/dev/null || true
+  done
+  kill "${pid}" 2>/dev/null || true
+  sleep 0.3
+  kill -9 "${pid}" 2>/dev/null || true
+  demo_log "Stopped ${label} (pid ${pid})"
+}
+
+# Record PIDs of currently running demo servers so reset can stop them cleanly.
+# Safe to call after start skill launches durable background shells.
+demo_record_grafana_server_pids() {
+  require_repo_root
+  local bpid fpid
+  bpid="$(lsof -nP -iTCP:3000 -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
+  if [[ -n "${bpid}" ]]; then
+    echo "${bpid}" >"$(demo_backend_pidfile)"
+    demo_log "Recorded backend pid ${bpid} → $(demo_backend_pidfile)"
+  fi
+  # Prefer the yarn start wrapper; fall back to nx grafana:start.
+  fpid="$(pgrep -f 'node .*/yarn start|node .*/yarn\.js start' 2>/dev/null | head -1 || true)"
+  if [[ -z "${fpid}" ]]; then
+    fpid="$(pgrep -f 'nx run grafana:start' 2>/dev/null | head -1 || true)"
+  fi
+  if [[ -n "${fpid}" ]]; then
+    echo "${fpid}" >"$(demo_frontend_pidfile)"
+    demo_log "Recorded frontend pid ${fpid} → $(demo_frontend_pidfile)"
+  fi
+}
+
+# Stop Grafana backend (:3000) + frontend yarn/webpack watcher.
+# Prefer pidfiles; fall back to port / process-name discovery.
+demo_stop_grafana_servers() {
+  require_repo_root
+  demo_kill_pidfile_tree "$(demo_backend_pidfile)" "Grafana backend"
+  demo_kill_pidfile_tree "$(demo_frontend_pidfile)" "Grafana frontend (yarn)"
+
+  # Fallbacks when pidfiles were never written (older start sessions).
+  local bpid
+  bpid="$(lsof -nP -iTCP:3000 -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
+  if [[ -n "${bpid}" ]]; then
+    kill "${bpid}" 2>/dev/null || true
+    sleep 0.3
+    kill -9 "${bpid}" 2>/dev/null || true
+    demo_log "Stopped Grafana backend on :3000 (pid ${bpid}, no pidfile)"
+  fi
+
+  # Kill yarn/nx/webpack watchers rooted in this repo (avoid unrelated yarn).
+  local p
+  for p in $(pgrep -f "nx run grafana:start|webpack.dev.ts|fork-ts-checker-webpack-plugin" 2>/dev/null || true); do
+    # Only kill if cwd or command references this repo (best-effort via ps args).
+    if ps -p "${p}" -o command= 2>/dev/null | grep -q "${REPO_ROOT}\|webpack.dev.ts\|grafana:start\|fork-ts-checker"; then
+      kill "${p}" 2>/dev/null || true
+    fi
+  done
+  for p in $(pgrep -f "node .*/yarn start|node .*/\.bin/yarn start" 2>/dev/null || true); do
+    kill "${p}" 2>/dev/null || true
+  done
+  rm -f "$(demo_backend_pidfile)" "$(demo_frontend_pidfile)"
+  if demo_login_ok; then
+    demo_warn "Grafana still answering /login after stop attempt — check leftover processes on :3000"
+  else
+    demo_log "Grafana backend/frontend stopped (next chat's start skill will relaunch → native terminals)"
+  fi
+}
+
 # Print a machine-readable readiness gate for the agent skill. Exit 0 only when
 # the minimum bar for live beats is met (login + UC2 plant). Frontend/traffic
 # are reported but do not fail the gate alone — the skill restarts them.

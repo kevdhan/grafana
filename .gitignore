@@ -298,7 +298,9 @@ debug-storybook.log
 
 # Field Engineer demo kit active-session marker
 .demo-state
-# Field Engineer demo kit background traffic-generator pid
+# Field Engineer demo kit process pidfiles
+.demo-backend.pid
+.demo-frontend.pid
 .demo-traffic.pid
 .demo-traffic.log
 # Field Engineer demo kit screenshot-harness outputs (throwaway)

@@ -26,7 +26,7 @@ This demo answers all three across **two Explore use cases**:
 ## Preflight
 
 1. `./scripts/demos/setup.sh explore-trace` (or via `/kev-demo-grafana-explore-trace-start`) — creates `demo/explore-trace`; profile `setup.sh` **plants UC2**, starts/provisions Prometheus, starts/verifies traffic when `:3000` is up, and prints a `=== DEMO READINESS ===` gate. **Run unsandboxed** (`required_permissions: ["all"]`) so it can reach Docker (see Data source note).
-2. **Follow the readiness gate** — do not hand-plant `limitSeries.ts` or invent server starts. If `status: NOT READY`, start only the missing backend/frontend as durable Cursor background shells (`block_until_ms: 0`, `exec …`), then re-run `./scripts/demos/explore-trace/setup.sh`. **Never** use `nohup … &` in a one-shot Shell (process group dies when the Shell exits).
+2. **Follow the readiness gate** — do not hand-plant `limitSeries.ts` or invent server starts. If `status: NOT READY`, start only the missing backend/frontend as durable Cursor background shells (`block_until_ms: 0`, `exec …`), then re-run `./scripts/demos/explore-trace/setup.sh` (also records `.demo-backend.pid` / `.demo-frontend.pid`). **Never** use `nohup … &` in a one-shot Shell. **Reset stops FE/BE by default** so the *next* chat owns fresh terminals; Prometheus stays up unless `--stop-deps`. Use `--keep-servers` only for same-chat iteration.
 3. **PATH** — `go version` / `node -v` (often need `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"`)
 4. **Reuse if healthy** — readiness `login: OK` means skip restart
 5. Else warm + start (durable background shells only):

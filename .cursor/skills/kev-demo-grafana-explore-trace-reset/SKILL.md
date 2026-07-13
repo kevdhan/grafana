@@ -3,11 +3,12 @@ name: kev-demo-grafana-explore-trace-reset
 description: >-
   Field Engineer demo — RESET / tear down an active explore-trace demo. Drives
   ./scripts/demos/reset.sh: checks out the base branch, deletes the local
-  demo/explore-trace branch, clears .demo-state, stops the background traffic
-  generator, and removes the provisioned Prometheus datasource (leaving the
-  Prometheus container running by default). Defaults to --save-kit: commits the
-  reusable kit to the base branch and discards only the throwaway product changes,
-  so kit work is never lost. Use when the user says reset the explore-trace demo,
+  demo/explore-trace branch, clears .demo-state, stops traffic + Grafana
+  backend/frontend (so the next chat owns fresh terminals), unplants UC2, and
+  removes the provisioned Prometheus datasource (leaving the Prometheus
+  container running by default). Defaults to --save-kit: commits the reusable
+  kit to the base branch and discards only the throwaway product changes, so kit
+  work is never lost. Use when the user says reset the explore-trace demo,
   tear down the demo, end the demo, clean up after the demo, or
   /kev-demo-grafana-explore-trace-reset. Companion to the start skill
   /kev-demo-grafana-explore-trace-start.
@@ -47,9 +48,15 @@ If `.demo-state` is missing, there's nothing to reset — say so and stop.
 
 ### 2. Run reset — DEFAULT is `--save-kit` (unsandboxed)
 
-**Always reset with `--save-kit` unless the user explicitly asks otherwise.** It is the standard teardown for this demo: it commits the reusable kit (`scripts/demos`, `.cursor/skills`, demo-safety rule, `.gitignore`) onto the base branch as a **local** commit, then discards the live product changes under `public/app` / `pkg` — so kit work is never lost and the Explore/panel UI + planted bug are always reset. It also **stops the background traffic generator** (`.demo-traffic.pid`), **unplants UC2** (`unplant-uc2.sh` removes `limitSeries*` + restores `GraphContainer.tsx`), and **removes the provisioned Prometheus datasource** (leaving the Prometheus container running for a fast next spinup).
+**Always reset with `--save-kit` unless the user explicitly asks otherwise.** Standard teardown:
 
-Run with `required_permissions: ["all"]` (so it can reach Docker for the datasource reload and manage processes):
+- Commits reusable kit onto the base branch (local), discards `public/app` / `pkg` product changes
+- Stops traffic generator + **Grafana backend + frontend** (so a *new* Cursor chat’s start skill relaunches them → native terminals in that chat)
+- Unplants UC2 (`unplant-uc2.sh`)
+- Removes provisioned Prometheus datasource
+- **Leaves Prometheus container running** on `:9090` (fast next spinup)
+
+Run with `required_permissions: ["all"]`:
 
 ```sh
 ./scripts/demos/reset.sh --save-kit
@@ -59,10 +66,11 @@ Only deviate if the user explicitly requests it:
 
 | Situation | Command |
 |-----------|---------|
-| **Default — keep kit, reset the demo** | `./scripts/demos/reset.sh --save-kit` |
+| **Default — keep kit, stop FE/BE, keep Prometheus** | `./scripts/demos/reset.sh --save-kit` |
+| Same-chat iteration — leave FE/BE up | add `--keep-servers` |
 | Discard EVERYTHING including uncommitted kit (rare — confirm first) | `./scripts/demos/reset.sh --force --clean-untracked` |
 | Keep the local demo branch | add `--keep-branch` |
-| Full cold teardown (also stop Prometheus/devenv containers) | `./scripts/demos/explore-trace/reset.sh --stop-deps`, then the reset above |
+| Full cold teardown (also stop Prometheus/devenv) | add `--stop-deps` (or run profile `reset.sh --stop-deps` then the reset above) |
 
 ### 3. Push the kit commit (offer — never auto-push)
 
@@ -73,6 +81,9 @@ Only deviate if the user explicitly requests it:
 - `git branch --show-current` → base branch (`main`)
 - `git status --short` → clean (product changes discarded)
 - `.demo-state` gone; local `demo/explore-trace` deleted (unless `--keep-branch`)
+- `/login` should **not** be 200 (FE/BE stopped) unless `--keep-servers`
+- Prometheus `:9090` still healthy unless `--stop-deps`
+- This chat’s backend/frontend terminal tabs should end once those processes exit
 
 ## Related
 

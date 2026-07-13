@@ -131,7 +131,9 @@ Await `/login → 200` (and webpack “Compiled” for HMR), then **re-run**:
 ./scripts/demos/explore-trace/setup.sh
 ```
 
-That re-attaches traffic, re-verifies the UC2 plant, and reprints the gate. Loop until `READY`.
+That **records server pids** (`.demo-backend.pid` / `.demo-frontend.pid` for reset), re-attaches traffic, re-verifies the UC2 plant, and reprints the gate. Loop until `READY`.
+
+**Why reset stops FE/BE:** Cursor terminals belong to the chat that started them. After reset, the next demo is usually a **new chat** — leaving servers up would make start silently reuse invisible processes. Reset stops Grafana backend/frontend by default (Prometheus stays); start relaunches them here so terminals are native to this chat.
 
 ### 4. What setup owns (so you don't)
 
