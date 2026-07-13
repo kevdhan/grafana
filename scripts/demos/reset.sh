@@ -11,12 +11,17 @@ source "${SCRIPT_DIR}/_lib.sh"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--force] [--keep-branch] [--clean-untracked]
+Usage: $(basename "$0") [--save-kit] [--force] [--keep-branch] [--clean-untracked]
 
 Reads .demo-state, checks out the base branch, deletes the local demo branch
 (unless --keep-branch), and clears demo state.
 
 Options:
+  --save-kit         Before teardown, commit the reusable demo-kit changes
+                     (scripts/demos, .cursor/skills, demo-safety rule, .gitignore)
+                     onto the base branch (local commit — NOT pushed), then
+                     discard the live product changes under public/app and pkg.
+                     This is the one-command "keep my kit, reset the demo" path.
   --force            Allow discarding uncommitted changes to tracked files
                      (git reset --hard). Does NOT delete untracked files.
   --clean-untracked  Also run git clean -fd (destructive — removes untracked
@@ -29,6 +34,7 @@ EOF
 FORCE=0
 KEEP_BRANCH=0
 CLEAN_UNTRACKED=0
+SAVE_KIT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --force) FORCE=1; shift ;;
     --keep-branch) KEEP_BRANCH=1; shift ;;
     --clean-untracked) CLEAN_UNTRACKED=1; shift ;;
+    --save-kit) SAVE_KIT=1; shift ;;
     *) demo_die "Unknown flag: $1" ;;
   esac
 done
@@ -53,6 +60,13 @@ PROFILE_DIR="${DEMOS_ROOT}/${DEMO_ID}"
 if [[ -x "${PROFILE_DIR}/reset.sh" ]]; then
   demo_log "Running demo-specific reset: ${PROFILE_DIR}/reset.sh"
   "${PROFILE_DIR}/reset.sh" || demo_warn "Demo-specific reset exited non-zero"
+fi
+
+# --save-kit: preserve reusable kit changes on the base branch, then discard
+# the live product changes so the tree is clean for teardown below.
+if [[ "${SAVE_KIT}" == "1" ]]; then
+  demo_commit_kit_to_base "${BASE_BRANCH}"
+  demo_discard_product_changes
 fi
 
 if [[ -n "$(git status --porcelain)" ]]; then

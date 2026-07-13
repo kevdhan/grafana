@@ -129,11 +129,9 @@ Do **not** jump to Explore / Ask / Design Mode until `/login` returns **200**. F
    curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/login   # expect 200
    ```
    Profile `setup.sh` / `_lib.sh` helpers: `demo_login_ok`, `demo_wait_for_login`, `demo_warm_go_modules`.
-6. **Seed real error data (for UC1)** — once `/login` is 200, run **unsandboxed** (`required_permissions: ["all"]`):
-   ```sh
-   ./scripts/demos/explore-trace/seed-traffic.sh   # default 40 cycles
-   ```
-   Curls Grafana to generate a status-code mix on Grafana's own `grafana_http_request_duration_seconds_count` (scraped by the devenv Prometheus as `job="grafana"`): steady 200s plus a **401** spike and some 404s. No extra container. Verified: after running, the 401 rate ≈ the 200 rate — that's the incident signal UC1 reveals. 5xx can't be forced easily on Grafana, so the story uses a **4xx (401 auth)** spike after a deploy, which also reinforces the "a deploy changed something" theme.
+6. **Error data (for UC1) is auto-generated per demo.** When Grafana is up, `setup.sh` starts a **continuous** background generator (`seed-traffic.sh --watch`, pid in `.demo-traffic.pid`; `reset.sh` stops it) that curls Grafana to produce a status-code mix on its own `grafana_http_request_duration_seconds_count` (scraped as `job="grafana"`): steady 200s plus a **401** spike and 404s. No extra container.
+   - **Continuous, not one-shot:** scraped metrics (memory, `up`) are generated continuously by the running stack, but the 401/404 error signal only exists while we generate it — a one-shot burst decays out of `rate()[5m]` in ~5 min. The watcher keeps it fresh so **any** window (5m/15m/60m) shows the spike. 5xx can't be forced on Grafana, so the story uses a 4xx (401 auth) spike after a deploy.
+   - If setup ran before Grafana was up, start it manually **unsandboxed** (`required_permissions: ["all"]`): `./scripts/demos/explore-trace/seed-traffic.sh --watch &` (or a one-shot `./scripts/demos/explore-trace/seed-traffic.sh` right before the beat).
 
 #### Backend cold-start notes
 
@@ -231,6 +229,8 @@ A safe, reversible bug lives on `demo/explore-trace` (discarded by reset). **Say
 ```
 
 Confirm base branch, `.demo-state` gone, no leftover `demo/explore-trace` (unless `--keep-branch`).
+
+**One-command "keep my kit, reset the demo":** `./scripts/demos/reset.sh --save-kit` commits the reusable demo-kit changes onto the base branch (local commit, **not** pushed — prints a `git push origin main` reminder) and discards the live product changes under `public/app` / `pkg`. Encodes the kit-vs-product split so kit work is never lost and the Explore/panel UI + planted bug are always reset.
 
 Profile `reset.sh` removes the provisioned Prometheus datasource and, by default, **leaves the Prometheus container running** for a fast next iteration. For a full cold teardown (stop containers via `make devenv-down`), run `./scripts/demos/explore-trace/reset.sh --stop-deps`. Top-level reset owns branch teardown.
 

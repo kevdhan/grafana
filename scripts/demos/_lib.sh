@@ -270,6 +270,46 @@ demo_remove_prometheus_datasource() {
   fi
 }
 
+# --- Continuous traffic generator (keeps 4xx data fresh for time-window queries) ---
+#
+# Scraped metrics (memory, up, request counts) are generated continuously by the
+# running devenv containers + Grafana, so any recent window has points. But the
+# 401/404 error spike used in Use Case 1 is only produced by our own traffic, and
+# rate() over 5m/15m/60m decays to zero once that traffic stops. So we run a
+# background trickle for the duration of the demo.
+
+demo_traffic_pidfile() {
+  echo "${REPO_ROOT}/.demo-traffic.pid"
+}
+
+# Start the continuous traffic generator in the background (idempotent).
+demo_start_traffic() {
+  local script="${DEMOS_ROOT}/explore-trace/seed-traffic.sh"
+  local pidfile
+  pidfile="$(demo_traffic_pidfile)"
+  [[ -f "${script}" ]] || return 0
+  if [[ -f "${pidfile}" ]] && kill -0 "$(cat "${pidfile}" 2>/dev/null)" 2>/dev/null; then
+    demo_log "Traffic generator already running (pid $(cat "${pidfile}"))"
+    return 0
+  fi
+  nohup bash "${script}" --watch >/dev/null 2>&1 &
+  echo $! >"${pidfile}"
+  demo_log "Started continuous traffic generator (pid $!) — keeps 200/401/404 fresh for 5m/15m/60m windows"
+}
+
+# Stop the continuous traffic generator (used by reset).
+demo_stop_traffic() {
+  local pidfile
+  pidfile="$(demo_traffic_pidfile)"
+  [[ -f "${pidfile}" ]] || return 0
+  local pid
+  pid="$(cat "${pidfile}" 2>/dev/null || true)"
+  if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+    kill "${pid}" 2>/dev/null && demo_log "Stopped traffic generator (pid ${pid})"
+  fi
+  rm -f "${pidfile}"
+}
+
 # Best-effort: ask a running Grafana to reload datasource provisioning.
 demo_reload_datasource_provisioning() {
   if demo_login_ok; then
@@ -297,4 +337,40 @@ demo_backend_cmd_hint() {
   Agent Shell tip: pin GOMODCACHE=$HOME/go/pkg/mod and GOCACHE=$HOME/Library/Caches/go-build
   (or call demo_ensure_durable_go_caches); prefer unsandboxed shell for download/build.
 EOF
+}
+
+# --- Reset helpers: preserve the demo kit, discard product changes ---
+#
+# The reusable demo kit (scripts, skills, rule, gitignore) is baseline-worthy and
+# should survive reset; the live product changes under public/app and pkg are what
+# the demo builds and reset throws away.
+
+# Stage + commit only the demo-kit paths, then fast-forward the base branch to
+# include that commit (local only — never auto-pushes; prints a push reminder).
+demo_commit_kit_to_base() {
+  local base="$1"
+  require_repo_root
+  git add -- scripts/demos .cursor/skills .cursor/rules/demo-safety.mdc .gitignore 2>/dev/null || true
+  if git diff --cached --quiet; then
+    demo_log "No demo-kit changes to commit"
+    return 0
+  fi
+  git commit -m "demo: update demo kit (auto-saved on reset)" >/dev/null
+  demo_log "Committed demo-kit changes"
+  # Only move base if it's a true fast-forward (base is an ancestor of HEAD).
+  if git merge-base --is-ancestor "${base}" HEAD 2>/dev/null; then
+    git branch -f "${base}" HEAD
+    demo_log "Fast-forwarded ${base} to the demo-kit commit — NOT pushed; run: git push origin ${base}"
+  else
+    demo_warn "${base} is not a fast-forward ancestor; kit commit left on the current branch for manual handling"
+  fi
+}
+
+# Discard live product changes (modified + untracked) under public/app and pkg,
+# scoped so unrelated untracked files elsewhere are never touched.
+demo_discard_product_changes() {
+  require_repo_root
+  git restore --staged --worktree -- public/app pkg 2>/dev/null || true
+  git clean -fd -- public/app pkg >/dev/null 2>&1 || true
+  demo_log "Discarded product changes under public/app and pkg"
 }

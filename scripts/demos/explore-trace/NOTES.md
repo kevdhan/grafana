@@ -35,7 +35,9 @@ This demo answers all three across **two Explore use cases**:
    - Backend: if recent `bin/grafana` exists → `./bin/grafana server -profile -profile-addr=127.0.0.1 -profile-port=6000 -packaging=dev cfg:app_mode=development` (build once with `go build -o bin/grafana ./pkg/cmd/grafana`); else non-race `go run ./pkg/cmd/grafana -- server -packaging=dev cfg:app_mode=development`  
      Or `make run`. **Avoid** `make run-go` (hardcodes `-race`, slow cold compile)
 5. **Health gate** — do not start product beats until `/login` is `200` (frontend compile alone is not enough)
-6. **Seed real error data** — run `./scripts/demos/explore-trace/seed-traffic.sh` (default 40 cycles; **run unsandboxed**, `required_permissions: ["all"]`, so it can reach `:3000`). It curls Grafana to generate a realistic status-code mix on Grafana's own `grafana_http_request_duration_seconds_count` metric (scraped by the devenv Prometheus as `job="grafana"`): steady 200s plus a spike of **401** (auth failures) and some 404s. No extra container. Verified: after running, the 401 rate ≈ the 200 rate — that's the incident signal Use Case 1 reveals.
+6. **Error data is auto-generated per demo run.** When Grafana is up, `setup.sh` starts a **continuous** background traffic generator (`seed-traffic.sh --watch`, pid in `.demo-traffic.pid`) that curls Grafana to produce a steady status-code mix on its own `grafana_http_request_duration_seconds_count` metric (scraped as `job="grafana"`): steady 200s plus **401** (auth failures) and 404s. No extra container. `reset.sh` stops it.
+   - **Why continuous, not one-shot:** scraped metrics (memory, `up`, request counts) are already generated continuously by the running stack, but the 401/404 *error* signal only exists while we generate it — a one-shot burst decays out of `rate()[5m]` in ~5 min. The watcher keeps 401/404 fresh so **any** time window (5m / 15m / 60m) shows the spike.
+   - If setup ran before Grafana was up (so it couldn't start), start it manually (unsandboxed): `./scripts/demos/explore-trace/seed-traffic.sh --watch &` — or a one-shot burst right before the beat: `./scripts/demos/explore-trace/seed-traffic.sh`.
 7. Plugin version-compat log noise is OK if `/login` is 200
 8. Know shortcuts: Agents Window (`Cmd+Shift+P` → “Open Agents Window”); Design Mode `Cmd+Shift+D`
 
@@ -85,7 +87,7 @@ Same running app for both use cases — Ask/Design to understand & improve UX (U
 
 Beats 1–5. On-call is paged for an error-rate spike, runs the 5xx query they always reach for, and hits **No data** — because a deploy renamed the metric. The improved diagnostic empty state does the triage; fixing the query to a real metric reveals the actual **401 spike** seeded by `seed-traffic.sh`.
 
-> **Run `./scripts/demos/explore-trace/seed-traffic.sh` first** (Preflight step 6) so real error data exists before you start.
+> **Error data:** `setup.sh` runs `seed-traffic.sh --watch` in the background (Preflight step 6), so the 401 spike stays fresh for 5m/15m/60m windows for the whole session. `reset.sh` stops it.
 
 ### Beat 1 — Product context: the 2 a.m. page (~4 min)
 
@@ -292,7 +294,13 @@ A planted, safe, reversible bug (it lives on the `demo/explore-trace` branch and
 ./scripts/demos/reset.sh
 ```
 
-Confirm: back on `main` (or recorded base), `.demo-state` gone, no leftover `demo/explore-trace` branch.
+**One-command "keep my kit, reset the demo":**
+```sh
+./scripts/demos/reset.sh --save-kit
+```
+`--save-kit` commits the reusable demo-kit changes (`scripts/demos`, `.cursor/skills`, demo-safety rule, `.gitignore`) onto the base branch as a **local** commit (never auto-pushed — it prints a `git push origin main` reminder to respect the review gate), then discards the live product changes under `public/app` / `pkg`. This encodes the split: kit is preserved, the Explore/panel UI + planted bug are thrown away.
+
+Confirm: back on `main` (or recorded base), `.demo-state` gone, no leftover `demo/explore-trace` branch. (Also stops the background traffic generator.)
 
 ---
 
@@ -323,7 +331,7 @@ Confirm: back on `main` (or recorded base), `.demo-state` gone, no leftover `dem
 ## Success criteria
 
 - FE can trigger `/kev-demo-grafana-explore-trace` and follow this script
-- `seed-traffic.sh` produces a real 401 spike on `grafana_http_request_duration_seconds_count`
+- `seed-traffic.sh --watch` (auto-started by setup, stopped by reset) keeps a real 401/404 spike on `grafana_http_request_duration_seconds_count` fresh for any time window
 - **UC1:** Ask produces an accurate Run → API → Go map (optionally captured in a Cursor Canvas); Design Mode selects the real empty-state node → builds the active diagnosis across `ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx` (+ `request` threading) → the empty state shows "No metric named … did you mean" and the culprit label filter, updating via HMR; "Copy fixed query" → the fixed query returns data and reveals the seeded 401 spike
 - **UC2:** Ask traces the graph pipeline to `scaleSeries.ts`; Agent fixes the byte divisor → `scaleSeries.test.ts` goes green → memory graph corrects
 - Reset returns to a clean base with no leftover demo branch (planted bug discarded)

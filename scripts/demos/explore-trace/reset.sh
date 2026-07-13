@@ -19,6 +19,9 @@ done
 
 echo "→ (explore-trace) demo-specific reset"
 
+# Stop the background traffic generator started by setup.
+demo_stop_traffic
+
 demo_remove_prometheus_datasource
 # If Grafana is up, reload so the provisioned datasource is dropped now
 # (otherwise it lingers until the next backend restart).

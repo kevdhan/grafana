@@ -20,6 +20,14 @@ if demo_ensure_prometheus; then
   # without a restart; otherwise it is picked up on next backend start.
   demo_reload_datasource_provisioning
   demo_log "Data source: Prometheus (localhost:9090) provisioned"
+  # Keep a steady 200/401/404 trickle running so the Use Case 1 error spike stays
+  # fresh for rate() over any time window (5m/15m/60m) throughout the demo.
+  # Only meaningful once Grafana is up (the metric is Grafana's own request count).
+  if demo_login_ok; then
+    demo_start_traffic
+  else
+    demo_log "Grafana not up yet — start traffic after login: ./scripts/demos/explore-trace/seed-traffic.sh --watch &"
+  fi
 else
   demo_remove_prometheus_datasource
   demo_log "Data source: using TestData fallback (No Data Points scenario)"
