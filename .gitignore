@@ -298,3 +298,5 @@ debug-storybook.log
 
 # Field Engineer demo kit active-session marker
 .demo-state
+# Field Engineer demo kit screenshot-harness outputs (throwaway)
+scripts/demos/**/.shot*.png
