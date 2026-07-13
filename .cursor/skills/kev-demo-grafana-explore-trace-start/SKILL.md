@@ -5,8 +5,9 @@ description: >-
   up servers, runs the two Explore use cases). UC1 — Ask-mode trace of Grafana
   Explore Run → API → Go (optionally captured in a Cursor Canvas), then Agents
   Window + Design Mode to build an active-diagnosis empty state (ExploreNoDataDiagnostics.tsx + PanelDataErrorView.tsx) that queries the datasource.
-  UC2 — Ask traces the Explore graph pipeline and Agent fixes a units bug in
-  scaleSeries.ts, turning a failing unit test green. Use when the user says
+  UC2 — Ask traces the Explore graph series-limiting pipeline and Agent fixes a
+  dropped-series bug in limitSeries.ts + GraphContainer.tsx (only 1 line drawn
+  when the disclaimer says 20), turning a failing unit test green. Use when the user says
   start explore-trace demo, grafana explore demo, /kev-demo-grafana-explore-trace-start,
   or wants to begin the Ask + Design Mode + Agent Grafana demo. To tear the demo
   down afterward, use the companion skill /kev-demo-grafana-explore-trace-reset.
@@ -19,7 +20,7 @@ Starts (and runs) the **explore-trace** customer demo across **two Explore use c
 To tear it down afterward, use the companion skill **`/kev-demo-grafana-explore-trace-reset`**.
 
 - **UC1 — No data → diagnose & fix the query.** Ask maps the request path (capture it in a Cursor Canvas); Design Mode builds an *active-diagnosis* empty state (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`) that queries the datasource to explain why (metric "did you mean" + culprit label filter); one-click fix reveals a seeded 401 spike.
-- **UC2 — Data looks wrong → find & fix a bug.** Ask traces the graph scaling pipeline to `scaleSeries.ts`; Agent fixes a units bug and turns a failing unit test green (planted, reversible demo artifact).
+- **UC2 — Data looks wrong → find & fix a bug.** Ask traces the graph series-limiting pipeline to `limitSeries.ts` (via `GraphContainer.tsx`); Agent fixes a dropped-series bug (only 1 line drawn when the disclaimer says 20) and turns a failing unit test green (planted, reversible demo artifact).
 
 Full talk track lives in `scripts/demos/explore-trace/NOTES.md`.
 
@@ -45,7 +46,7 @@ Always run setup at the start and reset at the end of a customer session.
 1. Prefer `./scripts/demos/setup.sh` / `./scripts/demos/reset.sh` — no free-hand destructive git.
 2. Never force-push `main` / `master`. Never delete remote branches unless asked.
 3. Do **not** pass `--clean-untracked` unless the user explicitly wants it.
-4. Live edits are scoped: UC1 Design Mode builds the Explore-scoped empty state in `ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx` (guarded by `eventsScope === 'explore'`) and threads `request` through `Explore.tsx` → `GraphContainer.tsx` → `ExploreGraph.tsx`; UC2 Agent fixes only the byte divisor in `public/app/features/explore/Graph/scaleSeries.ts`.
+4. Live edits are scoped: UC1 Design Mode builds the Explore-scoped empty state in `ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx` (guarded by `eventsScope === 'explore'`) and threads `request` through `Explore.tsx` → `GraphContainer.tsx` → `ExploreGraph.tsx`; UC2 Agent fixes only the hardcoded series cap in `public/app/features/explore/Graph/limitSeries.ts` (`1` → `MAX_NUMBER_OF_TIME_SERIES`, consumed by `GraphContainer.tsx`).
 5. Do **not** change `runQueries`, the Explore query pipeline, `pkg/api/ds_query.go` / `pkg/api/api.go`, dashboard "No data" behavior, auth, or alerting in the live demo.
 6. Keep empty-state copy professional (no jokes / customer-name hardcoding).
 7. If `.demo-state` exists for another demo, confirm before switching.
@@ -135,6 +136,7 @@ Do **not** jump to Explore / Ask / Design Mode until `/login` returns **200**. F
    ```
    Profile `setup.sh` / `_lib.sh` helpers: `demo_login_ok`, `demo_wait_for_login`, `demo_warm_go_modules`.
 6. **Error data (for UC1) is auto-generated per demo.** When Grafana is up, `setup.sh` starts a **continuous** background generator (`seed-traffic.sh --watch`, pid in `.demo-traffic.pid`; `reset.sh` stops it) that curls Grafana to produce a status-code mix on its own `grafana_http_request_duration_seconds_count` (scraped as `job="grafana"`): steady 200s plus a **401** spike and 404s. No extra container.
+   - **⚠ 401s come from *unauthenticated* requests, NOT wrong passwords.** The generator hits an auth-required endpoint with no creds (`curl http://localhost:3000/api/admin/settings`, no `-u`) — that returns 401 without counting as a failed login. Never generate 401s with `curl -u admin:wrongpass …`: repeated bad-password attempts trip Grafana's brute-force login protection and **lock the admin account (~5 min)**, blocking `admin:admin` everywhere (UI + API) and breaking the whole demo. If admin login ever locks, stop the failing requests and wait ~5 min (the lockout auto-clears).
    - **Continuous, not one-shot:** scraped metrics (memory, `up`) are generated continuously by the running stack, but the 401/404 error signal only exists while we generate it — a one-shot burst decays out of `rate()[5m]` in ~5 min. The watcher keeps it fresh so **any** window (5m/15m/60m) shows the spike. 5xx can't be forced on Grafana, so the story uses a 4xx (401 auth) spike after a deploy.
    - If setup ran before Grafana was up, start it manually **unsandboxed** (`required_permissions: ["all"]`): `./scripts/demos/explore-trace/seed-traffic.sh --watch &` (or a one-shot `./scripts/demos/explore-trace/seed-traffic.sh` right before the beat).
 
@@ -213,15 +215,15 @@ Call out Design Mode caveats from NOTES (Agents Window browser; source edit not 
 
 A safe, reversible bug lives on `demo/explore-trace` (discarded by reset). **Say it's an intentional demo artifact.**
 
-1. In Explore (Prometheus), query a memory metric that **returns data**: `go_memstats_alloc_bytes{job="grafana"}`.
-2. The graph shows values **~1000× too large** (GB rendered as if TB) — a **units bug**.
-3. Use Cursor **Ask** to trace the Explore graph pipeline to the culprit: `public/app/features/explore/Graph/scaleSeries.ts`. `bytesToMegabytes` divides bytes by `1000` instead of the correct mebibyte divisor `1024 * 1024`. It's wired into `ExploreGraph.tsx` (`dataWithConfig` memo → `applyExploreByteScaling`), **scoped to byte-named series** so UC1's rate/status series are unaffected.
+1. In Explore (Prometheus), query a metric that **returns many series**: `prometheus_http_requests_total` (returns **56 series** here).
+2. The graph draws **only 1 line**, while the disclaimer above it reads *"⚠ Showing only 20 series — Show all 56"*. The mismatch (claims 20, draws 1) is the obvious "something's broken" tell.
+3. Use Cursor **Ask** to trace the Explore graph series-limiting pipeline to the culprit: `public/app/features/explore/Graph/limitSeries.ts`. It exports `limitSeriesForDisplay(data, showAllSeries)` and `MAX_NUMBER_OF_TIME_SERIES = 20`, but when not showing all it caps the series at a hardcoded **`1`** instead of `MAX_NUMBER_OF_TIME_SERIES` (a plausible leftover-debug hardcode). It's wired into `GraphContainer.tsx` (the `slicedData` memo calls `limitSeriesForDisplay(data, showAllSeries)`), while the "Showing only N series" `LimitedDataDisclaimer` still uses the real `MAX_NUMBER_OF_TIME_SERIES` — hence the disclaimer says 20 while the graph shows 1.
 4. Show the failing unit test as the reproducible artifact:
    ```sh
-   yarn jest public/app/features/explore/Graph/scaleSeries.test.ts --watchAll=false
+   yarn jest public/app/features/explore/Graph/limitSeries.test.ts --watchAll=false
    ```
-   (Currently **3 failed, 1 passed** — failure shows `Received [1048.576, 8388.608]` vs `Expected [1, 8]`.)
-5. Cursor **Agent** fixes the divisor (`bytes / (1024 * 1024)`) → test goes **green** → memory graph corrects.
+   (Currently **2 failed, 1 passed** — failure shows `Received length: 1` vs `Expected length: 20`.)
+5. Cursor **Agent** fixes the cap (`1` → `MAX_NUMBER_OF_TIME_SERIES`) → test goes **green** → all 20 series render and match the disclaimer.
 
 **Talk:** two Cursor modes across two use cases — Ask/Design to understand & improve UX (UC1), Agent + a failing test to root-cause & fix a real bug (UC2).
 
@@ -241,7 +243,7 @@ When the session ends, tear down with the companion skill **`/kev-demo-grafana-e
 | Allowed | Not allowed in live demo |
 |---------|--------------------------|
 | UC1: active diagnosis (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`, `eventsScope === 'explore'`) + `request` threading (`Explore`/`GraphContainer`/`ExploreGraph`) | `runQueries` / query pipeline |
-| UC2: byte divisor fix in `scaleSeries.ts` (planted bug) so `scaleSeries.test.ts` passes | `pkg/api/ds_query.go` / `pkg/api/api.go` |
+| UC2: hardcoded series-cap fix in `limitSeries.ts` (`1` → `MAX_NUMBER_OF_TIME_SERIES`, consumed by `GraphContainer.tsx`) so `limitSeries.test.ts` passes | `pkg/api/ds_query.go` / `pkg/api/api.go` |
 | Tiny i18n `t()` if required | Dashboard "No data" behavior in `PanelDataErrorView.tsx` |
 | Professional, reversible UI / bug-fix | Auth, alerting, migrations, broad refactors |
 

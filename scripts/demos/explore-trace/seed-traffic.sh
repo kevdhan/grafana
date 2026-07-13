@@ -33,14 +33,18 @@ for arg in "$@"; do
   esac
 done
 
-# One round of mixed traffic: healthy 200s + 401 auth failures + a 404.
+# One round of mixed traffic: healthy 200s + 401s + a 404.
 emit_mixed() {
   local tag="${1:-x}"
   curl -s -o /dev/null -u "${ADMIN_AUTH}" "${GRAFANA_URL}/api/health"
   curl -s -o /dev/null -u "${ADMIN_AUTH}" "${GRAFANA_URL}/api/search?limit=1"
-  # 401 — auth failures (e.g. a service token rotated/broken by a deploy)
-  curl -s -o /dev/null -u "admin:wrongpass" "${GRAFANA_URL}/api/admin/settings"
-  # 404 — endpoint/resource removed or renamed by a deploy
+  # 401 — UNAUTHENTICATED request (no credentials submitted).
+  # IMPORTANT: do NOT send a wrong password here. Repeated bad-password attempts
+  # trip Grafana's brute-force protection and lock the admin account for ~5 min,
+  # which blocks admin:admin everywhere and breaks the whole demo. An
+  # unauthenticated request returns 401 without counting as a failed login.
+  curl -s -o /dev/null "${GRAFANA_URL}/api/admin/settings"
+  # 404 — endpoint/resource removed or renamed by a deploy (valid admin creds)
   curl -s -o /dev/null -u "${ADMIN_AUTH}" "${GRAFANA_URL}/api/dashboards/uid/removed-by-deploy-${tag}"
 }
 

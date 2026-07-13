@@ -13,12 +13,12 @@ Engineers ask: *“Where does Run query actually go?”*, *“Can Cursor change 
 This demo answers all three across **two Explore use cases**:
 
 - **Use Case 1 — No data → diagnose & fix the query.** Ask maps Explore Run → API → Go; Design Mode builds an *active-diagnosis* empty state that queries the datasource to explain **why** (metric "did you mean" + which label filter matched nothing), one-click fix.
-- **Use Case 2 — Data looks wrong → find & fix a bug.** Ask traces the graph data pipeline; Agent fixes a units bug and turns a failing unit test green.
+- **Use Case 2 — Data looks wrong → find & fix a bug.** Ask traces the graph series-limiting pipeline; Agent fixes a dropped-series bug (only 1 line drawn when the disclaimer says 20) and turns a failing unit test green.
 
 | Bucket | Story in this demo |
 |--------|--------------------|
-| 1 — Codebase understanding | Ask: Run button → `runQueries` → `POST /api/ds/query` → Go handler; Ask traces the Explore graph scaling pipeline (UC2) |
-| 2 — Agent edits | Design Mode builds the active-diagnosis empty state (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`) (UC1); Agent fixes the units bug in `scaleSeries.ts` (UC2) |
+| 1 — Codebase understanding | Ask: Run button → `runQueries` → `POST /api/ds/query` → Go handler; Ask traces the Explore graph series-limiting pipeline (UC2) |
+| 2 — Agent edits | Design Mode builds the active-diagnosis empty state (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`) (UC1); Agent fixes the dropped-series bug in `limitSeries.ts` + `GraphContainer.tsx` (UC2) |
 | 3 — Skills / orchestration | `/kev-demo-grafana-explore-trace-start` + `/kev-demo-grafana-explore-trace-reset` + demo kit setup/reset |
 | 4 — Terminal / servers | Fast spinup: warm `go mod download`, non-race backend, `/login` → 200 before beats; `seed-traffic.sh` for real error data |
 | 8 — Browser tool | Agents Window browser + Design Mode (`Cmd+Shift+D`); Cursor Canvas as a shareable trace artifact |
@@ -36,6 +36,7 @@ This demo answers all three across **two Explore use cases**:
      Or `make run`. **Avoid** `make run-go` (hardcodes `-race`, slow cold compile)
 5. **Health gate** — do not start product beats until `/login` is `200` (frontend compile alone is not enough)
 6. **Error data is auto-generated per demo run.** When Grafana is up, `setup.sh` starts a **continuous** background traffic generator (`seed-traffic.sh --watch`, pid in `.demo-traffic.pid`) that curls Grafana to produce a steady status-code mix on its own `grafana_http_request_duration_seconds_count` metric (scraped as `job="grafana"`): steady 200s plus **401** (auth failures) and 404s. No extra container. `reset.sh` stops it.
+   - **⚠ 401s come from *unauthenticated* requests, NOT wrong passwords.** The generator hits an auth-required endpoint with no credentials (`curl http://localhost:3000/api/admin/settings`, no `-u`) — that returns 401 without counting as a failed login. Do **not** generate 401s with `curl -u admin:wrongpass …`: repeated bad-password attempts trip Grafana's brute-force login protection and **lock the admin account (~5 min)**, which blocks `admin:admin` everywhere (UI + API) and breaks the whole demo. If admin login ever gets locked, stop the failing requests and wait ~5 min (the lockout auto-clears).
    - **Why continuous, not one-shot:** scraped metrics (memory, `up`, request counts) are already generated continuously by the running stack, but the 401/404 *error* signal only exists while we generate it — a one-shot burst decays out of `rate()[5m]` in ~5 min. The watcher keeps 401/404 fresh so **any** time window (5m / 15m / 60m) shows the spike.
    - If setup ran before Grafana was up (so it couldn't start), start it manually (unsandboxed): `./scripts/demos/explore-trace/seed-traffic.sh --watch &` — or a one-shot burst right before the beat: `./scripts/demos/explore-trace/seed-traffic.sh`.
 7. Plugin version-compat log noise is OK if `/login` is 200
@@ -63,8 +64,8 @@ UC1  No data → diagnose & fix the query (the 2 a.m. page)
            PanelDataErrorView.tsx (the Explore-scoped empty state) → HMR
 
 UC2  Data looks wrong → find & fix a bug with Cursor
-  Ask:     Explore graph → dataWithConfig memo → applyExploreByteScaling → scaleSeries.ts
-  Agent:   fix the byte-scaling divisor → failing unit test goes green → graph corrects
+  Ask:     Explore graph → GraphContainer slicedData memo → limitSeriesForDisplay → limitSeries.ts
+  Agent:   fix the hardcoded series cap (1 → MAX_NUMBER_OF_TIME_SERIES) → failing unit test goes green → all series render
 ```
 
 Same running app for both use cases — Ask/Design to understand & improve UX (UC1), Agent + a failing test to root-cause & fix a real bug (UC2).
@@ -271,18 +272,19 @@ A planted, safe, reversible bug (it lives on the `demo/explore-trace` branch and
 
 ### Beat 5b — Data looks wrong → Agent fix (~6 min)
 
-1. In Explore (Prometheus), query a memory metric that **returns data**:
+1. In Explore (Prometheus), query a metric that **returns many series**:
    ```promql
-   go_memstats_alloc_bytes{job="grafana"}
+   prometheus_http_requests_total
    ```
-2. The graph shows values **~1000× too large** (GB rendered as if TB) — a **units bug**.
-3. Use Cursor **Ask** to trace the Explore graph data pipeline to the culprit: `public/app/features/explore/Graph/scaleSeries.ts`. The function `bytesToMegabytes` divides bytes by `1000` (kilobytes-ish) instead of the correct mebibyte divisor `1024 * 1024`. It's wired into `ExploreGraph.tsx` (`dataWithConfig` memo → `applyExploreByteScaling`), **scoped to byte-named series** so Use Case 1's rate/status series are unaffected.
+   (returns **56 series** here)
+2. The graph draws **only 1 line**, but the disclaimer above it reads *"⚠ Showing only 20 series — Show all 56"*. The mismatch (claims 20, draws 1) is the obvious "something's broken" tell.
+3. Use Cursor **Ask** to trace the Explore graph series-limiting pipeline to the culprit: `public/app/features/explore/Graph/limitSeries.ts`. It exports `limitSeriesForDisplay(data, showAllSeries)` and `MAX_NUMBER_OF_TIME_SERIES = 20`, but when not showing all it caps the series at a hardcoded **`1`** instead of `MAX_NUMBER_OF_TIME_SERIES` (a plausible leftover-debug hardcode). It's wired into `public/app/features/explore/Graph/GraphContainer.tsx` (the `slicedData` memo calls `limitSeriesForDisplay(data, showAllSeries)`), while the "Showing only N series" `LimitedDataDisclaimer` still uses the real `MAX_NUMBER_OF_TIME_SERIES` constant — which is why the disclaimer says 20 while the graph shows 1.
 4. Show the reproducible artifact — a **failing unit test**:
    ```sh
-   yarn jest public/app/features/explore/Graph/scaleSeries.test.ts --watchAll=false
+   yarn jest public/app/features/explore/Graph/limitSeries.test.ts --watchAll=false
    ```
-   (Currently **3 failed, 1 passed** — the failure shows `Received [1048.576, 8388.608]` vs `Expected [1, 8]`.)
-5. Cursor **Agent** fixes the divisor (`bytes / (1024 * 1024)`), the test goes **green**, and the memory graph corrects.
+   (Currently **2 failed, 1 passed** — the failure shows `Received length: 1` vs `Expected length: 20`.)
+5. Cursor **Agent** fixes the cap (`1` → `MAX_NUMBER_OF_TIME_SERIES`), the test goes **green**, and all 20 series render so the graph matches the disclaimer.
 
 **Talk:** “Two Cursor modes across two use cases: Ask/Design to understand & improve the UX (UC1), Agent + a failing test to root-cause & fix a real bug (UC2). Capture this RCA in a Canvas too if the customer wants a shareable record.”
 
@@ -307,7 +309,7 @@ Confirm: back on `main` (or recorded base), `.demo-state` gone, no leftover `dem
 ## Safe change (agent may do)
 
 - UC1: the Explore-scoped empty state — `public/app/features/panel/components/ExploreNoDataDiagnostics.tsx` (the active diagnosis) + `PanelDataErrorView.tsx` (guarded by `eventsScope === 'explore'`), plus threading `request` through `Explore.tsx` → `GraphContainer.tsx` → `ExploreGraph.tsx`
-- UC2: fix the byte-scaling divisor in `public/app/features/explore/Graph/scaleSeries.ts` (planted demo bug) so `scaleSeries.test.ts` passes
+- UC2: fix the hardcoded series cap in `public/app/features/explore/Graph/limitSeries.ts` (`1` → `MAX_NUMBER_OF_TIME_SERIES`, planted demo bug) so `limitSeries.test.ts` passes — the cap is consumed by `GraphContainer.tsx`
 - Optional tiny i18n string if the repo pattern requires `t()`
 - Keep copy **professional** — no jokes, no customer-name hardcoding
 - Visible, reversible UX / bug-fix only
@@ -318,7 +320,7 @@ Confirm: back on `main` (or recorded base), `.demo-state` gone, no leftover `dem
 - `pkg/api/ds_query.go` / `pkg/api/api.go` or datasource query API behavior
 - Auth, billing, migrations, alert-evaluation core
 - Dashboard "No data" behavior in `PanelDataErrorView.tsx` (keep it minimal — Explore-scoped changes only)
-- Broad refactors outside `PanelDataErrorView.tsx` / `scaleSeries.ts`
+- Broad refactors outside `PanelDataErrorView.tsx` / `limitSeries.ts` / `GraphContainer.tsx`
 
 ## Reset checklist
 
@@ -333,5 +335,5 @@ Confirm: back on `main` (or recorded base), `.demo-state` gone, no leftover `dem
 - FE can trigger `/kev-demo-grafana-explore-trace-start` and follow this script (and `/kev-demo-grafana-explore-trace-reset` to tear down)
 - `seed-traffic.sh --watch` (auto-started by setup, stopped by reset) keeps a real 401/404 spike on `grafana_http_request_duration_seconds_count` fresh for any time window
 - **UC1:** Ask produces an accurate Run → API → Go map (optionally captured in a Cursor Canvas); Design Mode selects the real empty-state node → builds the active diagnosis across `ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx` (+ `request` threading) → the empty state shows "No metric named … did you mean" and the culprit label filter, updating via HMR; "Copy fixed query" → the fixed query returns data and reveals the seeded 401 spike
-- **UC2:** Ask traces the graph pipeline to `scaleSeries.ts`; Agent fixes the byte divisor → `scaleSeries.test.ts` goes green → memory graph corrects
+- **UC2:** Ask traces the graph series-limiting pipeline to `limitSeries.ts` (via `GraphContainer.tsx`); Agent fixes the hardcoded cap (`1` → `MAX_NUMBER_OF_TIME_SERIES`) → `limitSeries.test.ts` goes green → all 20 series render and match the disclaimer
 - Reset returns to a clean base with no leftover demo branch (planted bug discarded)
