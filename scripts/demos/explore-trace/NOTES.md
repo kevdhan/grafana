@@ -126,6 +126,24 @@ Confirm the centered **No data** empty state is visible before switching to Ask 
 
 **Talk:** “This is the real Explore dead end customers hit at 2 a.m. — we’re about to trace where Run goes, then improve this empty state from the browser.”
 
+#### Optional hook — the "Explain" toggle (if a customer notices it)
+
+The Prometheus query builder has an **Explain** toggle that annotates each part of the PromQL in plain English (`fetch series` → `rate()` → `sum()`). It explains **what the query computes** — a native, hand-written authoring aid. It does *not* run anything differently.
+
+Use it to your advantage — it **reinforces** the empty-state pitch, it doesn't compete with it:
+
+> “Grafana clearly believes in inline explanation — see this Explain toggle walking through my PromQL. But that philosophy stops at the results panel: when the query returns nothing, the empty state just says ‘No data.’ It doesn’t say *why* or *what to try next*. That’s exactly the gap we’ll close with Cursor — extending Grafana’s own explain-as-you-go spirit to the empty state.”
+
+**Keep three layers distinct** (pre-empt a customer conflating them):
+
+| Layer | Who explains it |
+|-------|-----------------|
+| The **query** (what this PromQL does) | Grafana’s `Explain` toggle (native) |
+| The **codebase** (how Run → API → Go executes) | Cursor **Ask** (Beat 2) |
+| The **empty-state UX** (what to do on “No data”) | Cursor **Design Mode** (Beat 4) |
+
+Explain = your query. Ask = the code. Design Mode = the UI. No overlap.
+
 ### Beat 2 — Trace with Ask (~8 min)
 
 Switch Cursor to **Ask** mode. Use these prompts (adapt lightly; keep the path):
@@ -178,6 +196,8 @@ Switch Cursor to **Ask** mode. Use these prompts (adapt lightly; keep the path):
 5. If adding/changing user-visible strings, follow repo i18n (`t()`) when that is the local pattern
 
 **Talk:** “Visual → code → hot reload. That’s the agent loop customers care about.”
+
+**Callback to the Explain hook (if you used it in Beat 1):** “Remember Grafana’s Explain toggle explaining the query? We just extended that same explain-as-you-go spirit to the empty state — the one place Grafana left blank — without leaving the browser.”
 
 ### Beat 5 — Verify (~2 min)
 
