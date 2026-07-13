@@ -23,3 +23,4 @@ Both processes should run simultaneously in separate terminal sessions. The back
 - Do not run these commands unless explicitly requested by the user
 - Both commands run indefinitely until stopped (Ctrl+C)
 - Ensure dependencies are installed (`make deps`) before starting
+- For Field Engineer demos, follow `kev-demo-kit` **fast spinup** first (reuse healthy `:3000`, `go mod download`, prefer non-race backend). Avoid `make run-go` — it hardcodes `-race`. Gate on `/login` → 200, not frontend compile alone.

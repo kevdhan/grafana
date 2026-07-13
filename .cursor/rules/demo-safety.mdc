@@ -1,0 +1,16 @@
+---
+description: Safety guardrails for Field Engineer customer demos in this Grafana fork
+alwaysApply: true
+---
+
+# Demo safety (Field Engineer)
+
+When running or preparing **customer demos** in this repo:
+
+- Use `./scripts/demos/setup.sh` and `./scripts/demos/reset.sh` — do not invent one-off git teardown.
+- Keep demo work on local `demo/<id>` branches only unless the user asks to push.
+- Never force-push `main` / `master`. Never delete remote branches unless explicitly requested.
+- Prefer small, reversible UI/copy changes during live demos; avoid auth, billing, migrations, and alert-evaluation core.
+- After a session, reset before starting another demo so the next customer starts clean.
+- If `.demo-state` exists, treat a demo as active — confirm before switching contexts.
+- Do not use `git clean -fd` / `--clean-untracked` unless the user explicitly asks.
