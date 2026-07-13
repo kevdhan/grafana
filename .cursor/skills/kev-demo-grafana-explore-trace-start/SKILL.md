@@ -217,13 +217,18 @@ A safe, reversible bug lives on `demo/explore-trace` (discarded by reset). **Say
 
 1. In Explore (Prometheus), query a metric that **returns many series**: `prometheus_http_requests_total` (returns **56 series** here).
 2. The graph draws **only 1 line**, while the disclaimer above it reads *"⚠ Showing only 20 series — Show all 56"*. The mismatch (claims 20, draws 1) is the obvious "something's broken" tell.
-3. Use Cursor **Ask** to trace the Explore graph series-limiting pipeline to the culprit: `public/app/features/explore/Graph/limitSeries.ts`. It exports `limitSeriesForDisplay(data, showAllSeries)` and `MAX_NUMBER_OF_TIME_SERIES = 20`, but when not showing all it caps the series at a hardcoded **`1`** instead of `MAX_NUMBER_OF_TIME_SERIES` (a plausible leftover-debug hardcode). It's wired into `GraphContainer.tsx` (the `slicedData` memo calls `limitSeriesForDisplay(data, showAllSeries)`), while the "Showing only N series" `LimitedDataDisclaimer` still uses the real `MAX_NUMBER_OF_TIME_SERIES` — hence the disclaimer says 20 while the graph shows 1.
-4. Show the failing unit test as the reproducible artifact:
+3. Use Cursor **Ask** to trace the series-limiting pipeline **and** generate a shareable diagram. Prompt:
+   > In Grafana Explore the graph renders only 1 series even though the query returns 56 and the disclaimer says "Showing only 20 series." Trace the series-limiting pipeline from the query result through `GraphContainer` to the exact function that caps the series, and identify the bug. Then generate a Cursor Canvas with a visual architecture diagram of the whole path — user query → `runQueries`/`runRequest` → `POST /api/ds/query` → Go handler → data frames back → `GraphContainer` `slicedData` → `limitSeriesForDisplay` → `PanelRenderer`/graph — and **highlight the node where the bug is** (the series cap).
+
+   Expected: Ask lands on `public/app/features/explore/Graph/limitSeries.ts` — `limitSeriesForDisplay` caps at a hardcoded **`1`** instead of `MAX_NUMBER_OF_TIME_SERIES` (wired via `GraphContainer.tsx`; the `LimitedDataDisclaimer` still uses the real constant, hence "20 shown, 1 drawn"). The Canvas renders the flow with the `limitSeries.ts` node flagged as the fault.
+4. **Use the failing unit test as the reproducible artifact** (normal Jest test, runs in the terminal):
    ```sh
    yarn jest public/app/features/explore/Graph/limitSeries.test.ts --watchAll=false
    ```
-   (Currently **2 failed, 1 passed** — failure shows `Received length: 1` vs `Expected length: 20`.)
-5. Cursor **Agent** fixes the cap (`1` → `MAX_NUMBER_OF_TIME_SERIES`) → test goes **green** → all 20 series render and match the disclaimer.
+   (Currently **2 failed, 1 passed** — `Received length: 1` vs `Expected length: 20`.) Optionally run it yourself to show RED first; the stronger move is to let the **Agent** reproduce → fix → re-run green autonomously.
+5. Cursor **Agent** prompt — fix + **validate with a unit test AND a visual (headless-browser) test**: *"`limitSeriesForDisplay` caps the series at 1 instead of `MAX_NUMBER_OF_TIME_SERIES`. Fix it, then (1) run `limitSeries.test.ts` until green, and (2) run a visual test with the Playwright harness `scripts/demos/explore-trace/shot.mjs` against `prometheus_http_requests_total` and confirm the graph renders ~20 series instead of 1."*
+   - Visual test (Agent runs it, **unsandboxed**): `PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright" EXPR='prometheus_http_requests_total' OUT='scripts/demos/explore-trace/.shot-uc2-after.png' node scripts/demos/explore-trace/shot.mjs`
+   - Result: cap becomes `MAX_NUMBER_OF_TIME_SERIES`, unit test **green**, and the screenshot shows ~20 series (matching the disclaimer) — two forms of proof (test + rendered screenshot).
 
 **Talk:** two Cursor modes across two use cases — Ask/Design to understand & improve UX (UC1), Agent + a failing test to root-cause & fix a real bug (UC2).
 
