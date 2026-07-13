@@ -22,7 +22,7 @@ To tear it down afterward, use the companion skill **`/kev-demo-grafana-explore-
 - **UC1 — No data → diagnose & fix the query.** Ask maps the request path (capture it in a Cursor Canvas); Design Mode builds an *active-diagnosis* empty state (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`) that queries the datasource to explain why (metric "did you mean" + culprit label filter); one-click fix reveals a seeded 401 spike.
 - **UC2 — Data looks wrong → find & fix a bug.** Ask traces the graph series-limiting pipeline to `limitSeries.ts` (via `GraphContainer.tsx`); Agent fixes a dropped-series bug (only 1 line drawn when the disclaimer says 20) and turns a failing unit test green (planted, reversible demo artifact).
 
-Full talk track lives in `scripts/demos/explore-trace/NOTES.md`.
+Full talk track: `scripts/demos/explore-trace/NOTES.md`. Live cheat sheet: `NOTES-BRIEF.md`.
 
 ## Branch lifecycle
 
@@ -163,7 +163,7 @@ That **records server pids** (`.demo-backend.pid` / `.demo-frontend.pid` for res
 - Plugin version-compat log noise is OK if `/login` is 200.
 - Login: `admin` / `admin`.
 
-Read `scripts/demos/explore-trace/NOTES.md` for talk track / prompts after `READY`.
+After `READY`, use `NOTES-BRIEF.md` while driving; fall back to `NOTES.md` for full prompts / narrative.
 
 ## Use Case 1 — No data → diagnose & fix the query (Steps 3–6)
 
@@ -273,4 +273,4 @@ When the session ends, tear down with the companion skill **`/kev-demo-grafana-e
 
 - Orchestrator: `/kev-demo-kit` (`.cursor/skills/kev-demo-kit/SKILL.md`)
 - Servers: `start-dev-server` / `dev-server-hot-reload`
-- Notes: `scripts/demos/explore-trace/NOTES.md`
+- Notes: `scripts/demos/explore-trace/NOTES.md` · cheat sheet: `NOTES-BRIEF.md`

@@ -1,71 +1,68 @@
 # explore-trace — two Explore use cases (Ask · Design · Agent)
 
 **Demo id:** `explore-trace`  
-**Skills:** `/kev-demo-grafana-explore-trace-start` (start/run) · `/kev-demo-grafana-explore-trace-reset` (teardown)  
-**Branch:** `demo/explore-trace` (created by setup, deleted by reset)  
-**Timebox:** ~30 min  
-**Login:** `admin` / `admin` → `http://localhost:3000`
+**Skills:** `/kev-demo-grafana-explore-trace-start` · `/kev-demo-grafana-explore-trace-reset`  
+**Branch:** `demo/explore-trace` (setup creates, reset deletes)  
+**Timebox:** ~30 min · **Login:** `admin` / `admin` → http://localhost:3000  
+**Cheat sheet:** [`NOTES-BRIEF.md`](./NOTES-BRIEF.md)
 
 ## Customer pain (Value Map)
 
-Engineers ask: *“Where does Run query actually go?”*, *“Can Cursor change UI from what I see in the browser?”*, and *“Can it actually root-cause and fix a real bug?”*
+Engineers ask: *Where does Run query go?* · *Can Cursor change UI from the browser?* · *Can it root-cause a real bug?*
 
-This demo answers all three across **two Explore use cases**:
+| UC | Story | Modes |
+|----|-------|-------|
+| **1** | No data → diagnose & fix the query | Ask → Canvas → Design Mode |
+| **2** | Data looks wrong → find & fix a bug | Ask → Agent + failing test |
 
-- **Use Case 1 — No data → diagnose & fix the query.** Ask maps Explore Run → API → Go; Design Mode builds an *active-diagnosis* empty state that queries the datasource to explain **why** (metric "did you mean" + which label filter matched nothing), one-click fix.
-- **Use Case 2 — Data looks wrong → find & fix a bug.** Ask traces the graph series-limiting pipeline; Agent fixes a dropped-series bug (only 1 line drawn when the disclaimer says 20) and turns a failing unit test green.
+| Bucket | In this demo |
+|--------|----------------|
+| 1 — Codebase understanding | Ask: Run → `runQueries` → `POST /api/ds/query` → Go; Ask: series-limiting pipeline (UC2) |
+| 2 — Agent edits | Design: active-diagnosis empty state (UC1); Agent: `limitSeries.ts` cap fix (UC2) |
+| 3 — Skills | start / reset skills + demo kit |
+| 4 — Terminal | Fast spinup, `/login` → 200, `seed-traffic.sh` |
+| 8 — Browser | Agents Window + Design Mode; Cursor Canvas |
 
-| Bucket | Story in this demo |
-|--------|--------------------|
-| 1 — Codebase understanding | Ask: Run button → `runQueries` → `POST /api/ds/query` → Go handler; Ask traces the Explore graph series-limiting pipeline (UC2) |
-| 2 — Agent edits | Design Mode builds the active-diagnosis empty state (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`) (UC1); Agent fixes the dropped-series bug in `limitSeries.ts` + `GraphContainer.tsx` (UC2) |
-| 3 — Skills / orchestration | `/kev-demo-grafana-explore-trace-start` + `/kev-demo-grafana-explore-trace-reset` + demo kit setup/reset |
-| 4 — Terminal / servers | Fast spinup: warm `go mod download`, non-race backend, `/login` → 200 before beats; `seed-traffic.sh` for real error data |
-| 8 — Browser tool | Agents Window browser + Design Mode (`Cmd+Shift+D`); Cursor Canvas as a shareable trace artifact |
+## Product story
+
+```
+UC1  No data → diagnose & fix (2 a.m. page)
+  Ask:     Run → explore state → POST /api/ds/query → pkg/api/ds_query.go
+  Canvas:  shareable Run → API → Go trace
+  Design:  select No data → PanelDataErrorView.tsx → HMR
+
+UC2  Data looks wrong → fix a bug
+  Ask:     GraphContainer → limitSeriesForDisplay → limitSeries.ts
+  Agent:   cap 1 → MAX_NUMBER_OF_TIME_SERIES → test green → ~20 series
+```
+
+Same running app for both: Ask/Design for UX understanding (UC1), Agent + test for a real bug (UC2).
+
+---
 
 ## Preflight
 
-1. `./scripts/demos/setup.sh explore-trace` (or via `/kev-demo-grafana-explore-trace-start`) — creates `demo/explore-trace`; profile `setup.sh` **plants UC2**, starts/provisions Prometheus, starts/verifies traffic when `:3000` is up, and prints a `=== DEMO READINESS ===` gate. **Run unsandboxed** (`required_permissions: ["all"]`) so it can reach Docker (see Data source note).
-2. **Follow the readiness gate** — do not hand-plant `limitSeries.ts` or invent server starts. If `status: NOT READY`, start only the missing backend/frontend as durable Cursor background shells (`block_until_ms: 0`, `exec …`), then re-run `./scripts/demos/explore-trace/setup.sh` (also records `.demo-backend.pid` / `.demo-frontend.pid`). **Never** use `nohup … &` in a one-shot Shell. **Reset stops FE/BE by default** so the *next* chat owns fresh terminals; Prometheus stays up unless `--stop-deps`. Use `--keep-servers` only for same-chat iteration.
-3. **PATH** — `go version` / `node -v` (often need `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"`)
-4. **Reuse if healthy** — readiness `login: OK` means skip restart
-5. Else warm + start (durable background shells only):
-   - Pin durable Go caches if agent Shell sandboxed them (`GOMODCACHE=$HOME/go/pkg/mod`, `GOCACHE=$HOME/Library/Caches/go-build`); prefer unsandboxed Shell for download/build
-   - Frontend: `yarn start` — **must run outside the Cursor sandbox**. Don't try `CHOKIDAR_USEPOLLING=true`; `unset` polling env vars.
-   - Backend: prefer `./bin/grafana server …` when present; else non-race `go run …`. **Avoid** `make run-go` (hardcodes `-race`).
-6. **Health gate** — do not start product beats until readiness says `READY` (`/login` 200 + UC2 plant)
-7. **Error data is auto-generated.** Profile setup starts `seed-traffic.sh --watch` when Grafana is up (pid in `.demo-traffic.pid`; soft-curl so a Grafana restart does not kill the watcher). `reset.sh` stops it.
-   - **⚠ 401s come from *unauthenticated* requests, NOT wrong passwords.** Never `curl -u admin:wrongpass` (locks admin ~5 min).
-8. Plugin version-compat log noise is OK if `/login` is 200
-9. Know shortcuts: Agents Window (`Cmd+Shift+P` → “Open Agents Window”); Design Mode `Cmd+Shift+D`
+1. `./scripts/demos/setup.sh explore-trace` (or the start skill) — creates `demo/explore-trace`; profile setup **plants UC2**, provisions Prometheus, starts traffic when `:3000` is up, prints `=== DEMO READINESS ===`. **Run unsandboxed** so Docker works.
+2. Follow the readiness gate — do not hand-plant or invent server starts. If `NOT READY`, start only missing FE/BE as durable Cursor background shells (`block_until_ms: 0`, `exec …`), then re-run `./scripts/demos/explore-trace/setup.sh`. Never `nohup … &` in a one-shot Shell. Reset stops FE/BE by default (next chat owns terminals); Prometheus stays unless `--stop-deps`.
+3. **PATH:** `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"`
+4. Reuse if `login: OK`. Else:
+   - Pin Go caches if sandboxed: `GOMODCACHE=$HOME/go/pkg/mod`, `GOCACHE=$HOME/Library/Caches/go-build`
+   - Frontend: `yarn start` **unsandboxed**; `unset CHOKIDAR_USEPOLLING CHOKIDAR_INTERVAL WATCHPACK_POLLING`
+   - Backend: `./bin/grafana server …` if present; else non-race `go run …`. Avoid `make run-go` (`-race`).
+5. Start product beats only when gate says `READY`.
+6. Traffic: setup starts `seed-traffic.sh --watch` (`.demo-traffic.pid`). **401s = unauthenticated requests — never wrong passwords** (locks admin ~5 min).
+7. Plugin version-compat log noise is OK if `/login` is 200.
+8. Shortcuts: Agents Window (`Cmd+Shift+P`) · Design Mode `Cmd+Shift+D`
 
-### Data source (Prometheus strongly preferred, TestData fallback)
+### Data source (Prometheus preferred)
 
-Prometheus makes the 2 a.m. story authentic — a real PromQL query that genuinely returns empty. Don't fake it by renaming TestData.
-
-- `setup.sh` starts a local Prometheus (`localhost:9090`) via `make devenv sources=prometheus` and provisions it as the **default** datasource (`conf/provisioning/datasources/demo-explore-trace.yaml`, gitignored).
-- **Run `setup.sh` unsandboxed** (`required_permissions: ["all"]`). The Cursor sandbox blocks the Docker socket, so setup thinks Docker is absent and **falsely falls back to TestData even when Docker Desktop is running**. (Verify Docker for real with an unsandboxed `docker ps`.)
-- **Basic auth:** devenv Prometheus (`web.yml`) requires `admin`/`admin`; the provisioned datasource and `demo_prometheus_ok` send those creds. Without them, `/-/healthy` and queries return **401**.
-- **First-run build ~1 min** (pulls/builds images). If the 30s health poll expires mid-build → TestData fallback; just re-run `./scripts/demos/explore-trace/setup.sh` once the container is up (fast reuse path, provisions via reload API — no backend restart).
-- Verify: `curl -s -u admin:admin http://localhost:3000/api/datasources/uid/demo-explore-trace-prom/health` → `"status":"OK"`.
-- If Docker is **genuinely** absent, TestData → No Data Points still works; the Run → `/api/ds/query` → Go path is identical. Say so out loud instead of pretending it's Prometheus.
-- Prometheus is a container independent of the git branch, so it's reused across iterations (fast). Top-level `reset.sh` leaves it running; for a cold teardown run `scripts/demos/explore-trace/reset.sh --stop-deps` (calls `make devenv-down`).
-
-## Product story (two use cases)
-
-```
-UC1  No data → diagnose & fix the query (the 2 a.m. page)
-  Ask:     Run query → explore state → POST /api/ds/query → pkg/api/ds_query.go
-  Canvas:  capture the Run → API → Go trace as a shareable artifact
-  Design:  Agents Window → select the No data DOM node → prompt → edit
-           PanelDataErrorView.tsx (the Explore-scoped empty state) → HMR
-
-UC2  Data looks wrong → find & fix a bug with Cursor
-  Ask:     Explore graph → GraphContainer slicedData memo → limitSeriesForDisplay → limitSeries.ts
-  Agent:   fix the hardcoded series cap (1 → MAX_NUMBER_OF_TIME_SERIES) → failing unit test goes green → all series render
-```
-
-Same running app for both use cases — Ask/Design to understand & improve UX (UC1), Agent + a failing test to root-cause & fix a real bug (UC2).
+- Setup starts Prometheus on `:9090` (`make devenv sources=prometheus`) and provisions it as default (`conf/provisioning/datasources/demo-explore-trace.yaml`, gitignored).
+- **Unsandboxed setup required** — sandbox blocks Docker → false TestData fallback.
+- Prometheus basic auth: `admin` / `admin`. Verify:  
+  `curl -s -u admin:admin http://localhost:3000/api/datasources/uid/demo-explore-trace-prom/health` → `"status":"OK"`.
+- Cold devenv ~1 min; if 30s poll expires → TestData; re-run profile setup once `:9090` is healthy.
+- No Docker: TestData → No Data Points still works for Ask path; say so out loud. Full UC1 diagnosis needs Prometheus label API.
+- Reset leaves Prometheus up; cold teardown: `scripts/demos/explore-trace/reset.sh --stop-deps`.
 
 ---
 
@@ -73,233 +70,177 @@ Same running app for both use cases — Ask/Design to understand & improve UX (U
 
 ### Beat 0 — Setup (~2–5 min cold; ~0 if reusing)
 
-- Run setup script; confirm branch `demo/explore-trace` and `.demo-state`
-- Follow **Preflight** fast spinup; login only after `/login` → 200
-- Do **not** kill a mid-start backend — that wastes module download progress
+- Confirm `demo/explore-trace` + `.demo-state`; follow Preflight; login only after `/login` → 200.
+- Do not kill a mid-start backend.
 
 **Talk:** “We keep customer demos on disposable `demo/*` branches so reset is one script.”
 
 ---
 
-## Use Case 1 — No data → diagnose & fix the query (the 2 a.m. page)
+## Use Case 1 — No data → diagnose & fix the query
 
-Beats 1–5. On-call is paged for an error-rate spike, runs the 5xx query they always reach for, and hits **No data** — because a deploy renamed the metric. The improved diagnostic empty state does the triage; fixing the query to a real metric reveals the actual **401 spike** seeded by `seed-traffic.sh`.
-
-> **Error data:** `setup.sh` runs `seed-traffic.sh --watch` in the background (Preflight step 6), so the 401 spike stays fresh for 5m/15m/60m windows for the whole session. `reset.sh` stops it.
+On-call is paged for errors, runs the usual 5xx query, hits **No data** (metric renamed after deploy). Diagnostic empty state does triage; fixing to a real metric reveals the seeded **401 spike**.
 
 ### Beat 1 — Product context: the 2 a.m. page (~4 min)
 
-**Frame Explore first (one line):** *“Explore is Grafana’s ad-hoc investigation surface — not a saved dashboard. It’s where on-call engineers freehand a query during an incident, then pivot metrics → logs → traces. Dashboards are the known-important signals; Explore is for the question nobody built a panel for yet.”*
+**Frame Explore:** *“Explore is Grafana’s ad-hoc investigation surface — not a saved dashboard. On-call freehands a query during an incident; dashboards are the known signals.”*
 
-**Then tell the on-call story (say it out loud while you drive):**
+**On-call story (say while you drive):**
 
-> **2:04 a.m., Saturday. PagerDuty fires:** `checkout-api — error ratio > 5% (SLO burn rate 14.4x)`. I’m on call.
+> **2:04 a.m.** PagerDuty: `checkout-api — error ratio > 5% (SLO burn 14.4x)`. I open Explore → Prometheus → my usual 5xx query → **“No data.”**
 >
-> I open Explore, pick our **Prometheus** datasource, and reach for the query I always run first — 5xx rate for the service:
+> 2 a.m. math: wrong query? OTel rename (`http_requests_total` → something else)? `status` vs `http_status_code`? `job` vs `service`? Wrong tenant? Exporter dead (`absent()`)?
 >
-> ```promql
-> sum(rate(http_requests_total{job="checkout", status=~"5.."}[5m]))
-> ```
->
-> I set the range to the last 15 minutes, hit **Run**, and get… **“No data.”**
->
-> Now I’m doing the 2 a.m. math: Is checkout actually fine and my query wrong? Did last night’s deploy that moved us to OpenTelemetry rename `http_requests_total` → `http_server_requests_seconds_count`? Did the label change from `status` to `http_status_code`? Is `job="checkout"` even right — or is it `service="checkout"` now? Wrong Prometheus tenant? Did the exporter die so the series went *absent*?
->
-> Grafana’s empty state answers **none** of that. It just says “No data,” greyed out, dead center. That blank screen is the difference between a 2-minute fix and a 40-minute goose chase.
+> Empty state answers **none** of that — grey “No data,” dead center. That’s a 2-minute fix vs a 40-minute goose chase.
 
-**Why this scenario is realistic (the details that sell it):**
+| Detail | Why it sells |
+|--------|----------------|
+| SLO burn-rate alert | How teams actually page |
+| `http_requests_total{status=~"5.."}` | Canonical RED error query |
+| OTel rename / label drift | Common post-deploy “No data” |
+| `job` vs `service` | #1 self-inflicted miss |
 
-| Detail | Why it lands |
-|--------|--------------|
-| SLO **burn-rate** alert (14.4x) | How modern teams actually page (Google SRE multi-window), not raw thresholds |
-| `http_requests_total{status=~"5.."}` | Canonical RED-method error query; every Prometheus user recognizes it |
-| OTel migration renamed the metric | Very common real cause of “No data” — metric/label drift after a deploy |
-| `absent()` / stale series | Subtle case: query is right but the exporter stopped, so nothing returns |
-| `job` vs `service` label mismatch | The #1 self-inflicted “No data” |
+Beat 4 builds an empty state that **checks** these against the datasource — not tip lists.
 
-That last column is exactly what the empty state should help with — and in Beat 4 we prompt Design Mode to build an empty state that **actively checks** them against the datasource (does the metric exist? does each label filter match anything?), not just list them as tips.
+#### Drive the empty state (Prometheus)
 
-#### Getting the empty state on screen
-
-**Preferred — real Prometheus datasource** (provisioned by `setup.sh` when Docker is up; see `demo_ensure_prometheus`):
-
-1. Open `/explore`, pick **Prometheus**
-2. Run the 5xx query the on-call always reaches for — returns nothing because a deploy renamed the metric (`http_requests_total` doesn't exist here):
+1. Open `/explore` → **Prometheus**
+2. Empty query (metric doesn’t exist here; no `checkout` job):
    ```promql
    sum(rate(http_requests_total{job="checkout", status=~"5.."}[5m]))
    ```
-   (No `checkout` job is scraped locally, so this returns empty → authentic “No data”.)
-3. The **active-diagnosis** empty state (Beat 4) queries the datasource and names the cause: *"No metric named `http_requests_total` — did you mean `prometheus_http_requests_total`?"* and *"the filter `job="checkout"` matches no series"* → the fix is one click ("Copy fixed query").
-4. **Fix to the real metric and see data** — the graph fills in and shows the real **401 spike** seeded earlier (the errors they were paged for):
+3. After Beat 4: diagnosis names missing metric + bad label filter → **Copy fixed query**
+4. Reveal query (seeded **401 spike**):
    ```promql
    sum by (status_code) (rate(grafana_http_request_duration_seconds_count[5m]))
    ```
-   (`prometheus_http_requests_total` is another real metric you can show.) Talk point: **the empty state did the diagnosis; the fix reveals the actual incident signal.**
-5. Optional contrast: run `up` first (returns series → a graph), then the empty 5xx query, to show the *difference* between “data” and the dead-end empty state.
+5. Optional: run `up` first (graph), then the empty query (dead end).
 
-> **Basic auth:** the devenv Prometheus block (`web.yml`) requires `admin`/`admin`. The provisioned datasource and the `demo_prometheus_ok` health check both send those creds — if you provision Prometheus by hand, set `basicAuth: true` + `basicAuthUser/Password`, or `/-/healthy` and queries return **401** (this previously caused setup to fall back to TestData even though the container was up).
->
-> **First-run timing:** `make devenv sources=prometheus` builds several images (~1 min cold). The 30s health poll can expire mid-build and fall back to TestData; just re-run `./scripts/demos/explore-trace/setup.sh` once the container is up — it takes the fast reuse path and provisions the datasource.
+**TestData fallback:** scenario **No Data Points** → `NoData` component (different from graph empty state). Ask path still works; diagnosis upgrade needs Prometheus.
 
-**Fallback — TestData** (no Docker / Prometheus not running):
+Confirm centered **No data** before Ask / Design Mode.
 
-1. Open `/explore`, pick **TestData**
-2. Scenario **No Data Points** (`no_data_points`) → Explore renders the `NoData` component (`data-testid="explore-no-data"`) — a *different* Explore empty state from the graph one we improve in Beat 4
-3. Say out loud: *“TestData is a mock backend so this never flakes; the Run → API → Go path we trace next is identical to real Prometheus.”*
+**Talk:** “This is the 2 a.m. dead end — next we trace where Run goes, then improve this empty state from the browser.”
 
-> **Note:** the active-diagnosis empty state (Beat 4) lives on the **Prometheus graph** path (`PanelDataErrorView.tsx`) and needs the datasource's label API, so prefer Prometheus to land the full Use Case 1 payoff. With TestData you still get an authentic “No data” for the Ask trace, but not the diagnostic upgrade.
+#### Optional — Explain toggle
 
-Confirm the centered **No data** empty state is visible before switching to Ask / Design Mode.
+Prometheus **Explain** annotates PromQL in plain English. It does not change execution. Use it to reinforce the pitch:
 
-**Talk:** “This is the real Explore dead end customers hit at 2 a.m. — we’re about to trace where Run goes, then improve this empty state from the browser.”
+> “Grafana explains the query inline — but when results are empty, it just says ‘No data.’ That’s the gap we close with Cursor.”
 
-#### Optional hook — the "Explain" toggle (if a customer notices it)
-
-The Prometheus query builder has an **Explain** toggle that annotates each part of the PromQL in plain English (`fetch series` → `rate()` → `sum()`). It explains **what the query computes** — a native, hand-written authoring aid. It does *not* run anything differently.
-
-Use it to your advantage — it **reinforces** the empty-state pitch, it doesn't compete with it:
-
-> “Grafana clearly believes in inline explanation — see this Explain toggle walking through my PromQL. But that philosophy stops at the results panel: when the query returns nothing, the empty state just says ‘No data.’ It doesn’t say *why* or *what to try next*. That’s exactly the gap we’ll close with Cursor — extending Grafana’s own explain-as-you-go spirit to the empty state.”
-
-**Keep three layers distinct** (pre-empt a customer conflating them):
-
-| Layer | Who explains it |
-|-------|-----------------|
-| The **query** (what this PromQL does) | Grafana’s `Explain` toggle (native) |
-| The **codebase** (how Run → API → Go executes) | Cursor **Ask** (Beat 2) |
-| The **empty-state UX** (what to do on “No data”) | Cursor **Design Mode** (Beat 4) |
-
-Explain = your query. Ask = the code. Design Mode = the UI. No overlap.
+| Layer | Who |
+|-------|-----|
+| Query (what PromQL does) | Grafana Explain |
+| Codebase (Run → API → Go) | Cursor Ask (Beat 2) |
+| Empty-state UX | Cursor Design Mode (Beat 4) |
 
 ### Beat 2 — Trace with Ask (~8 min)
 
-Switch Cursor to **Ask** mode. Use these prompts (adapt lightly; keep the path):
+Switch to **Ask**. Prompts:
 
 1. **Where is Run?**  
    > In Grafana Explore, where is the Run query button defined? Start from ExploreToolbar and show me the click handler.
 
 2. **Trace to network**  
-   > From that Run action, trace how Explore actually executes the query — through frontend state / `runQueries` — until the network call. What HTTP method and path does it hit?
+   > From that Run action, trace how Explore executes the query — through frontend state / `runQueries` — until the network call. What HTTP method and path?
 
-3. **Which Go handler?**  
-   > Which Go handler serves `POST /api/ds/query`? Point me at `pkg/api/ds_query.go` (or the real entry) and summarize what it does in one paragraph.
+3. **Go handler**  
+   > Which Go handler serves `POST /api/ds/query`? Point at `pkg/api/ds_query.go` and summarize in one paragraph.
 
-**Expected map (for FE coaching):**
+**Map:** `ExploreToolbar` → `runQueries` → `runRequest` → `POST /api/ds/query` → `pkg/api/api.go` → `QueryMetricsV2`
 
-`ExploreToolbar` (Run) → `runQueries` → `runRequest` → `POST /api/ds/query` → `pkg/api/api.go` route → `pkg/api/ds_query.go` `QueryMetricsV2`
+**Talk:** “Ask is for understanding without editing yet.”
 
-**Talk:** “Ask is for understanding the system without editing it yet.”
+**Canvas:** After the trace, generate `explore-run-trace.canvas.tsx` (Run → API → Go) as a shareable artifact — not buried in chat.
 
-#### Capture it in a Cursor Canvas (shareable source of truth)
+**Talk:** “Canvas is the living source of truth for investigations like this.”
 
-After the Ask trace, generate/open a **Cursor Canvas** (`explore-run-trace.canvas.tsx`) that captures the Run → API → Go path as a standalone artifact engineers can open beside chat and share with teammates — instead of a trace buried in a chat thread.
-
-**Talk:** “Canvas is the team's living source-of-truth for investigations like this — it doesn't disappear when the chat scrolls. We can capture the Use Case 2 bug RCA the same way.”
-
-### Beat 3 — Agents Window browser (~2 min)
+### Beat 3 — Agents Window (~2 min)
 
 1. `Cmd+Shift+P` → **Open Agents Window**
-2. Open Browser → `http://localhost:3000/explore`
-3. Ensure the empty state is still visible (re-run the empty Prometheus/TestData query if needed)
+2. Browser → http://localhost:3000/explore
+3. Empty state still visible
 
-**Talk:** “Same app, now inside Cursor’s browser so Design Mode can target what we see.”
+**Talk:** “Same app, inside Cursor’s browser so Design Mode can target what we see.”
 
-### Beat 4 — Design Mode: build the diagnostic empty state (~7 min)
+### Beat 4 — Design Mode: diagnostic empty state (~7 min)
 
-**Where the empty state actually lives (say this — it's the lesson):**
+**Lesson:** Graph “No data” is **`PanelDataErrorView.tsx`** (`PanelDataErrorView` → … → `ExploreGraph`) — **not** `NoData.tsx`. Trust the Design Mode selection.
 
-The “No data” state for an empty Prometheus **graph** query is rendered by the shared panel component **`public/app/features/panel/components/PanelDataErrorView.tsx`** (stack: `PanelDataErrorView > TimeSeriesPanel > … > ExploreGraph`) — **not** `NoData.tsx`, which is a *different* Explore empty state. Selecting the real DOM node in Design Mode revealed the true component. **Trust the selection over the assumption** — that's how you find the right file fast.
-
-**Caveats (say out loud — don’t oversell):**
-
-- Design Mode lives in the **Agents Window** browser ([Cursor Design Mode docs](https://cursor.com/docs/agent/design-mode))
-- Toggle **`Cmd+Shift+D`** after the page has fully loaded
-- Selection + natural-language prompt → agent edits **source** (not a live CSS-only sidebar)
-- Needs **`yarn start`** HMR so the empty state updates without a manual rebuild
+**Caveats:** Agents Window browser · `Cmd+Shift+D` after load · edits **source** (not CSS-only) · needs `yarn start` HMR.
 
 **Steps:**
 
-1. Enable Design Mode (`Cmd+Shift+D`)
-2. Click the **No data** text on the Prometheus graph — the selection resolves to `PanelDataErrorView.tsx`
-3. Give the **structured prompt** below. This is an **Agent-scale, multi-file change** kicked off from the visual selection — not a CSS tweak — so it names the scope, the data it needs (which must be threaded in), and the exact behavior. Copy it verbatim to reproduce what's implemented here:
+1. `Cmd+Shift+D`
+2. Click **No data** on the Prometheus graph → resolves to `PanelDataErrorView.tsx`
+3. Paste this prompt (Agent-scale, multi-file — copy verbatim):
 
    > **Goal:** In Grafana Explore, turn the panel "No data" empty state into an *active diagnosis* that explains **why** a Prometheus query returned nothing — not a generic message.
    >
-   > **Scope:** Explore only. `PanelDataErrorView.tsx` is shared with dashboards, so gate the new behavior on the panel context `eventsScope === 'explore'` (Explore's panel context doesn't set `app`). Dashboards must keep the minimal "No data".
+   > **Scope:** Explore only. `PanelDataErrorView.tsx` is shared with dashboards, so gate on panel context `eventsScope === 'explore'` (Explore's panel context doesn't set `app`). Dashboards keep minimal "No data".
    >
-   > **Data needed:** the failed query text + datasource uid, from the panel's `data.request.targets`. `ExploreGraph` doesn't pass `request` today — thread `queryResponse.request` from `Explore.tsx` → `GraphContainer` → `ExploreGraph` into the `PanelRenderer` `data`.
+   > **Data needed:** failed query text + datasource uid from `data.request.targets`. Thread `queryResponse.request` from `Explore.tsx` → `GraphContainer` → `ExploreGraph` into `PanelRenderer` `data`.
    >
-   > **Behavior** (query the datasource resource proxy via `getBackendSrv`: `GET /api/datasources/uid/<uid>/resources/api/v1/label/__name__/values` for metric names, `/api/v1/label/<name>/values` for a label's values):
-   > 1. Parse the metric name and label matchers from the query.
-   > 2. If the metric name isn't in the datasource's metric list → show *"No metric named X exists"* + the closest real metric names (*"Did you mean …"*, ranked by similarity) + a **"Copy fixed query"** button that swaps in the top suggestion.
-   > 3. For each exact (`=`) label matcher whose value isn't among that label's real values → show *"The filter name=\"value\" matches no series"* + the valid values.
-   > 4. Also echo the queried time range and the failed query (with a Copy button). If nothing conclusive is found, fall back to a short "things to check" checklist.
+   > **Behavior** (via `getBackendSrv`: `GET /api/datasources/uid/{uid}/resources/api/v1/label/__name__/values` and `/api/v1/label/{name}/values`):
+   > 1. Parse metric name and label matchers from the query.
+   > 2. Missing metric → *"No metric named X"* + *"Did you mean …"* (ranked) + **"Copy fixed query"**.
+   > 3. Exact (`=`) label matcher with no matching series → show valid values.
+   > 4. Echo time range + failed query (Copy). Fallback: short checklist.
    >
-   > **Constraints:** user-visible strings via i18n (`t()` / `<Trans>`); no TypeScript type assertions (`as`); keep the diagnosis in a small dedicated component; don't change dashboard or panel-editor behavior.
+   > **Constraints:** i18n via `t()`; no TypeScript `as` assertions; small dedicated component; don't change dashboard/panel-editor behavior.
 
-4. **What this produces (already implemented here):**
-   - New component `public/app/features/panel/components/ExploreNoDataDiagnostics.tsx` — async diagnosis via the resource proxy (metric "did you mean" + label-matcher isolation).
-   - `PanelDataErrorView.tsx` renders it **Explore-scoped** (query echo + time range + Copy retained; checklist as fallback when the datasource can't be introspected).
-   - `request` threaded through `Explore.tsx` → `GraphContainer.tsx` → `ExploreGraph.tsx` so the empty state actually has the query + datasource uid.
-   - Result on the demo query: *"No metric named `http_requests_total` — did you mean `prometheus_http_requests_total`?"* + *"The filter `job="checkout"` matches no series; values: grafana, node_exporter, prometheus…"*
-5. Prefer **user-driven** selection in the browser; the agent implements across the files above.
+4. **Produces:** `ExploreNoDataDiagnostics.tsx` + Explore-scoped `PanelDataErrorView.tsx` + request threading. Demo result: missing `http_requests_total` + `job="checkout"` matches nothing.
+5. Prefer user-driven selection; agent implements across files.
 
-**Talk:** “Visual selection → a real, multi-file feature: the empty state now calls Prometheus's own label API to tell you the metric doesn't exist and which filter matched nothing — with the fix one click away. That's not a mockup; it's a feature Grafana could ship.”
+**Talk:** “Visual selection → multi-file feature: empty state calls Prometheus’s label API — metric missing, which filter failed, fix one click away.”
 
-**Callback to the Explain hook (if you used it in Beat 1):** “Remember Grafana’s Explain toggle explaining the query? We just extended that same explain-as-you-go spirit to the empty state — the one place Grafana left blank — without leaving the browser.”
+**If you used Explain:** “We extended that explain-as-you-go spirit to the empty state — without leaving the browser.”
 
-### Beat 5 — Verify + reveal the incident (~3 min)
+### Beat 5 — Verify + reveal (~3 min)
 
-- Confirm the Explore empty state updated via HMR (time range, failed query + Copy, the "No metric named … did you mean" suggestion, and the culprit label filter with its valid values)
-- **Fix the query** to a real metric and watch the graph fill in with the seeded **401 spike** — the errors they were paged for:
-  ```promql
-  sum by (status_code) (rate(grafana_http_request_duration_seconds_count[5m]))
-  ```
-- Optional Ask: “What file changed for the Explore empty state?” → `PanelDataErrorView.tsx`
+- Confirm HMR: time range, failed query + Copy, “did you mean”, culprit label + valid values
+- Run the reveal query (Beat 1) → **401 spike**
+- Optional Ask: which file changed? → `PanelDataErrorView.tsx`
 
 **Talk:** “The empty state did the diagnosis; the fix reveals the actual incident signal.”
 
 ---
 
-## Use Case 2 — Data looks wrong → find & fix a bug with Cursor
+## Use Case 2 — Data looks wrong → find & fix a bug
 
-A planted, safe, reversible bug (**auto-planted by `plant-uc2.sh` during profile setup**; discarded by `unplant-uc2.sh` / reset). This is where Cursor **Agent** root-causes and fixes a real defect, with a **failing unit test** as the reproducible artifact.
+Planted by `plant-uc2.sh` during setup; removed by `unplant-uc2.sh` / reset.
 
-> **This bug is an intentional demo artifact** — say so out loud so nobody thinks Grafana ships it.
+> **Say out loud:** intentional demo artifact — Grafana does not ship this.
 
-### Beat 5b — Data looks wrong → Agent fix (~6 min)
+### Beat 5b — Agent fix (~6 min)
 
-1. In Explore (Prometheus), query a metric that **returns many series**:
+1. Query many series:
    ```promql
    prometheus_http_requests_total
    ```
-   (returns **56 series** here)
-2. The graph draws **only 1 line**, but the disclaimer above it reads *"⚠ Showing only 20 series — Show all 56"*. The mismatch (claims 20, draws 1) is the obvious "something's broken" tell.
-3. Use Cursor **Ask** to trace the series-limiting pipeline **and** produce a shareable diagram. Prompt:
+   (~56 series here)
+2. Graph draws **1 line**; disclaimer: *"Showing only 20 series — Show all 56"* → mismatch = the tell.
+3. **Ask** (trace + Canvas):
    > In Grafana Explore the graph renders only 1 series even though the query returns 56 and the disclaimer says "Showing only 20 series." Trace the series-limiting pipeline from the query result through `GraphContainer` to the exact function that caps the series, and identify the bug. Then generate a Cursor Canvas with a visual architecture diagram of the whole path — user query → `runQueries`/`runRequest` → `POST /api/ds/query` → Go handler → data frames back → `GraphContainer` `slicedData` → `limitSeriesForDisplay` → `PanelRenderer`/graph — and **highlight the node where the bug is** (the series cap).
 
-   Expected: Ask lands on `public/app/features/explore/Graph/limitSeries.ts` — `limitSeriesForDisplay` caps at a hardcoded **`1`** instead of `MAX_NUMBER_OF_TIME_SERIES` (wired via `GraphContainer.tsx`; the `LimitedDataDisclaimer` still uses the real constant, hence "20 shown, 1 drawn"). The Canvas renders the end-to-end flow with the `limitSeries.ts` node flagged as the fault — a shareable RCA artifact.
-4. **Use the failing unit test as the reproducible artifact.** It's a normal Jest test (not auto-run), so it runs in the terminal. Pick per audience:
-   - **Show the "before" yourself (optional):** run it once to display RED —
-     ```sh
-     yarn jest public/app/features/explore/Graph/limitSeries.test.ts --watchAll=false
-     ```
-     (Currently **2 failed, 1 passed** — `Received length: 1` vs `Expected length: 20`.)
-   - **Let the Agent drive the whole loop (recommended):** point the Agent at the test and let Cursor reproduce it (run → red), fix, and re-run (→ green) autonomously — showcasing the reproduce → fix → verify loop.
-5. Cursor **Agent** prompt — fix it and **validate two ways: a unit test and a visual (headless-browser) test**:
-   > `limitSeriesForDisplay` in `limitSeries.ts` caps the series at 1 instead of `MAX_NUMBER_OF_TIME_SERIES`. Fix it, then validate: (1) run the failing tests in `limitSeries.test.ts` until green, and (2) run a **visual test** using Cursor's headless browser — the Playwright screenshot harness `scripts/demos/explore-trace/shot.mjs` — against the `prometheus_http_requests_total` query, and confirm the Explore graph now renders ~20 series instead of 1.
+   **Expected:** `limitSeries.ts` — `limitSeriesForDisplay` caps at hardcoded **`1`** instead of `MAX_NUMBER_OF_TIME_SERIES` (disclaimer still uses the real constant).
 
-   Visual test how-to (Cursor Agent runs this itself; **unsandboxed**):
+4. **Failing test** (optional RED yourself; prefer Agent loop):
+   ```sh
+   yarn jest public/app/features/explore/Graph/limitSeries.test.ts --watchAll=false
+   ```
+   (2 failed, 1 passed — length 1 vs 20)
+
+5. **Agent** prompt:
+   > `limitSeriesForDisplay` in `limitSeries.ts` caps the series at 1 instead of `MAX_NUMBER_OF_TIME_SERIES`. Fix it, then validate: (1) run `limitSeries.test.ts` until green, and (2) run a visual test with Playwright harness `scripts/demos/explore-trace/shot.mjs` against `prometheus_http_requests_total` and confirm the graph renders ~20 series instead of 1.
+
    ```sh
    export PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright"
    EXPR='prometheus_http_requests_total' OUT='scripts/demos/explore-trace/.shot-uc2-after.png' \
      node scripts/demos/explore-trace/shot.mjs
    ```
-   Result: the cap becomes `MAX_NUMBER_OF_TIME_SERIES`, the **unit test goes green**, and the **screenshot shows ~20 series** (matching the "Showing only 20" disclaimer) — up from 1. Two forms of proof: a unit test *and* a real rendered screenshot.
 
-**Talk:** “Cursor fixed the bug and proved it twice — a green unit test *and* a headless-browser screenshot of the actual graph. That's verification the customer can see, not just take on faith.”
-
-**Talk:** “Two Cursor modes across two use cases: Ask/Design to understand & improve the UX (UC1), Agent + a failing test to root-cause & fix a real bug (UC2). Capture this RCA in a Canvas too if the customer wants a shareable record.”
+**Talk:** “Fixed and proved twice — green unit test *and* a screenshot of the graph. Ask/Design improved UX (UC1); Agent + test fixed a real bug (UC2).”
 
 ---
 
@@ -307,46 +248,30 @@ A planted, safe, reversible bug (**auto-planted by `plant-uc2.sh` during profile
 
 ```sh
 ./scripts/demos/reset.sh
+./scripts/demos/reset.sh --save-kit   # local commit of kit on base; discard product edits
 ```
 
-**One-command "keep my kit, reset the demo":**
-```sh
-./scripts/demos/reset.sh --save-kit
-```
-`--save-kit` commits the reusable demo-kit changes (`scripts/demos`, `.cursor/skills`, demo-safety rule, `.gitignore`) onto the base branch as a **local** commit (never auto-pushed — it prints a `git push origin main` reminder to respect the review gate), then discards the live product changes under `public/app` / `pkg`. This encodes the split: kit is preserved, the Explore/panel UI + planted bug are thrown away.
-
-Confirm: back on `main` (or recorded base), `.demo-state` gone, no leftover `demo/explore-trace` branch. (Also stops the background traffic generator.)
+Confirm: base branch, `.demo-state` gone, `demo/explore-trace` deleted, traffic stopped.
 
 ---
 
-## Safe change (agent may do)
+## Safe change / do not touch
 
-- UC1: the Explore-scoped empty state — `public/app/features/panel/components/ExploreNoDataDiagnostics.tsx` (the active diagnosis) + `PanelDataErrorView.tsx` (guarded by `eventsScope === 'explore'`), plus threading `request` through `Explore.tsx` → `GraphContainer.tsx` → `ExploreGraph.tsx`
-- UC2: fix the hardcoded series cap in `public/app/features/explore/Graph/limitSeries.ts` (`1` → `MAX_NUMBER_OF_TIME_SERIES`, planted demo bug) so `limitSeries.test.ts` passes — the cap is consumed by `GraphContainer.tsx`
-- Optional tiny i18n string if the repo pattern requires `t()`
-- Keep copy **professional** — no jokes, no customer-name hardcoding
-- Visible, reversible UX / bug-fix only
-
-## Do not touch (live demo)
-
-- `runQueries` / Explore query pipeline
-- `pkg/api/ds_query.go` / `pkg/api/api.go` or datasource query API behavior
-- Auth, billing, migrations, alert-evaluation core
-- Dashboard "No data" behavior in `PanelDataErrorView.tsx` (keep it minimal — Explore-scoped changes only)
-- Broad refactors outside `PanelDataErrorView.tsx` / `limitSeries.ts` / `GraphContainer.tsx`
+| Safe | Do not touch |
+|------|----------------|
+| UC1: `ExploreNoDataDiagnostics.tsx`, Explore-scoped `PanelDataErrorView.tsx`, request threading (`Explore` → `GraphContainer` → `ExploreGraph`) | `runQueries` / query pipeline |
+| UC2: `limitSeries.ts` (`1` → `MAX_NUMBER_OF_TIME_SERIES`) | `pkg/api/ds_query.go`, `pkg/api/api.go` |
+| Professional copy; optional `t()` | Dashboard No data, auth, alerting, migrations, broad refactors |
 
 ## Reset checklist
 
-- [ ] `./scripts/demos/reset.sh` completed
-- [ ] On base branch (`main` unless recorded otherwise)
-- [ ] `.demo-state` removed
-- [ ] Local `demo/explore-trace` branch deleted (unless `--keep-branch`)
-- [ ] No need for profile `reset.sh` side effects (none seeded)
+- [ ] `./scripts/demos/reset.sh` done
+- [ ] On base branch · `.demo-state` removed · `demo/explore-trace` deleted
 
 ## Success criteria
 
-- FE can trigger `/kev-demo-grafana-explore-trace-start` and follow this script (and `/kev-demo-grafana-explore-trace-reset` to tear down)
-- `seed-traffic.sh --watch` (auto-started by setup, stopped by reset) keeps a real 401/404 spike on `grafana_http_request_duration_seconds_count` fresh for any time window
-- **UC1:** Ask produces an accurate Run → API → Go map (optionally captured in a Cursor Canvas); Design Mode selects the real empty-state node → builds the active diagnosis across `ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx` (+ `request` threading) → the empty state shows "No metric named … did you mean" and the culprit label filter, updating via HMR; "Copy fixed query" → the fixed query returns data and reveals the seeded 401 spike
-- **UC2:** Ask traces the graph series-limiting pipeline to `limitSeries.ts` (via `GraphContainer.tsx`); Agent fixes the hardcoded cap (`1` → `MAX_NUMBER_OF_TIME_SERIES`) → `limitSeries.test.ts` goes green → all 20 series render and match the disclaimer
-- Reset returns to a clean base with no leftover demo branch (planted bug discarded)
+- Start skill → this script; reset skill tears down
+- Traffic keeps 401/404 spike fresh on `grafana_http_request_duration_seconds_count`
+- **UC1:** Ask map (+ Canvas); Design Mode → active diagnosis via HMR; Copy fixed query → 401 spike
+- **UC2:** Ask → `limitSeries.ts`; Agent fix → test green → ~20 series match disclaimer
+- Reset → clean base, planted bug gone

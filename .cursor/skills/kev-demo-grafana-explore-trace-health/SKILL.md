@@ -161,4 +161,4 @@ cards) instead of a table — but the table is the fast default.
 - Start / run: `/kev-demo-grafana-explore-trace-start`
 - Reset / teardown: `/kev-demo-grafana-explore-trace-reset`
 - Orchestrator: `/kev-demo-kit`
-- Notes: `scripts/demos/explore-trace/NOTES.md`
+- Notes: `scripts/demos/explore-trace/NOTES.md` · cheat sheet: `NOTES-BRIEF.md`

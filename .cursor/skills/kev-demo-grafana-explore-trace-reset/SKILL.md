@@ -85,8 +85,21 @@ Only deviate if the user explicitly requests it:
 - Prometheus `:9090` still healthy unless `--stop-deps`
 - This chat’s backend/frontend terminal tabs should end once those processes exit
 
+## Notes / kit files preserved by `--save-kit`
+
+Kit paths staged by `demo_commit_kit_to_base` include `scripts/demos/**` and `.cursor/skills/**`, so these survive reset:
+
+| File | Role |
+|------|------|
+| `scripts/demos/explore-trace/NOTES.md` | Full talk track (detailed) |
+| `scripts/demos/explore-trace/NOTES-BRIEF.md` | Live-demo cheat sheet (Preview-friendly) |
+| `.cursor/skills/kev-demo-grafana-explore-trace-*` | start / reset / health skills |
+
+Product plants (`limitSeries.ts`, `GraphContainer.tsx` wiring, UC1 Design Mode edits under `public/app`) are discarded.
+
 ## Related
 
 - Start / run the demo: `/kev-demo-grafana-explore-trace-start`
 - Orchestrator: `/kev-demo-kit`
 - Scripts: `scripts/demos/reset.sh`, `scripts/demos/explore-trace/reset.sh`
+- Talk track: `NOTES.md` · cheat sheet: `NOTES-BRIEF.md`

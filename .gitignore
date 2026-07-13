@@ -305,3 +305,4 @@ debug-storybook.log
 .demo-traffic.log
 # Field Engineer demo kit screenshot-harness outputs (throwaway)
 scripts/demos/**/.shot*.png
+scripts/demos/**/.notes-marked-preview*
