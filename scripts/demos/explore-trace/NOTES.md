@@ -1,7 +1,7 @@
 # explore-trace — two Explore use cases (Ask · Design · Agent)
 
 **Demo id:** `explore-trace`  
-**Skill:** `/kev-demo-grafana-explore-trace`  
+**Skills:** `/kev-demo-grafana-explore-trace-start` (start/run) · `/kev-demo-grafana-explore-trace-reset` (teardown)  
 **Branch:** `demo/explore-trace` (created by setup, deleted by reset)  
 **Timebox:** ~30 min  
 **Login:** `admin` / `admin` → `http://localhost:3000`
@@ -19,13 +19,13 @@ This demo answers all three across **two Explore use cases**:
 |--------|--------------------|
 | 1 — Codebase understanding | Ask: Run button → `runQueries` → `POST /api/ds/query` → Go handler; Ask traces the Explore graph scaling pipeline (UC2) |
 | 2 — Agent edits | Design Mode builds the active-diagnosis empty state (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`) (UC1); Agent fixes the units bug in `scaleSeries.ts` (UC2) |
-| 3 — Skills / orchestration | `/kev-demo-grafana-explore-trace` + demo kit setup/reset |
+| 3 — Skills / orchestration | `/kev-demo-grafana-explore-trace-start` + `/kev-demo-grafana-explore-trace-reset` + demo kit setup/reset |
 | 4 — Terminal / servers | Fast spinup: warm `go mod download`, non-race backend, `/login` → 200 before beats; `seed-traffic.sh` for real error data |
 | 8 — Browser tool | Agents Window browser + Design Mode (`Cmd+Shift+D`); Cursor Canvas as a shareable trace artifact |
 
 ## Preflight
 
-1. `./scripts/demos/setup.sh explore-trace` (or via `/kev-demo-grafana-explore-trace`) — creates `demo/explore-trace`; profile `setup.sh` starts/provisions Prometheus and warms Go modules when `:3000` is cold. **Run unsandboxed** (`required_permissions: ["all"]`) so it can reach Docker (see Data source note).
+1. `./scripts/demos/setup.sh explore-trace` (or via `/kev-demo-grafana-explore-trace-start`) — creates `demo/explore-trace`; profile `setup.sh` starts/provisions Prometheus and warms Go modules when `:3000` is cold. **Run unsandboxed** (`required_permissions: ["all"]`) so it can reach Docker (see Data source note).
 2. **PATH** — `go version` / `node -v` (often need `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"`)
 3. **Reuse if healthy** — `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/login` → `200` means skip restart
 4. Else warm + start:
@@ -330,7 +330,7 @@ Confirm: back on `main` (or recorded base), `.demo-state` gone, no leftover `dem
 
 ## Success criteria
 
-- FE can trigger `/kev-demo-grafana-explore-trace` and follow this script
+- FE can trigger `/kev-demo-grafana-explore-trace-start` and follow this script (and `/kev-demo-grafana-explore-trace-reset` to tear down)
 - `seed-traffic.sh --watch` (auto-started by setup, stopped by reset) keeps a real 401/404 spike on `grafana_http_request_duration_seconds_count` fresh for any time window
 - **UC1:** Ask produces an accurate Run → API → Go map (optionally captured in a Cursor Canvas); Design Mode selects the real empty-state node → builds the active diagnosis across `ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx` (+ `request` threading) → the empty state shows "No metric named … did you mean" and the culprit label filter, updating via HMR; "Copy fixed query" → the fixed query returns data and reveals the seeded 401 spike
 - **UC2:** Ask traces the graph pipeline to `scaleSeries.ts`; Agent fixes the byte divisor → `scaleSeries.test.ts` goes green → memory graph corrects

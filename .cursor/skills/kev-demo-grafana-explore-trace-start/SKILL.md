@@ -1,19 +1,22 @@
 ---
-name: kev-demo-grafana-explore-trace
+name: kev-demo-grafana-explore-trace-start
 description: >-
-  Field Engineer demo: two Explore use cases. UC1 — Ask-mode trace of Grafana
+  Field Engineer demo — START a new explore-trace demo (creates the branch, spins
+  up servers, runs the two Explore use cases). UC1 — Ask-mode trace of Grafana
   Explore Run → API → Go (optionally captured in a Cursor Canvas), then Agents
   Window + Design Mode to build an active-diagnosis empty state (ExploreNoDataDiagnostics.tsx + PanelDataErrorView.tsx) that queries the datasource.
   UC2 — Ask traces the Explore graph pipeline and Agent fixes a units bug in
   scaleSeries.ts, turning a failing unit test green. Use when the user says
-  explore-trace demo, grafana explore demo, /kev-demo-grafana-explore-trace, or
-  wants the Ask + Design Mode + Agent Grafana demo.
-  Trigger via /kev-demo-grafana-explore-trace.
+  start explore-trace demo, grafana explore demo, /kev-demo-grafana-explore-trace-start,
+  or wants to begin the Ask + Design Mode + Agent Grafana demo. To tear the demo
+  down afterward, use the companion skill /kev-demo-grafana-explore-trace-reset.
+  Trigger via /kev-demo-grafana-explore-trace-start.
 ---
 
-# kev-demo-grafana-explore-trace
+# kev-demo-grafana-explore-trace-start
 
-Orchestrates the **explore-trace** customer demo across **two Explore use cases**:
+Starts (and runs) the **explore-trace** customer demo across **two Explore use cases**.
+To tear it down afterward, use the companion skill **`/kev-demo-grafana-explore-trace-reset`**.
 
 - **UC1 — No data → diagnose & fix the query.** Ask maps the request path (capture it in a Cursor Canvas); Design Mode builds an *active-diagnosis* empty state (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`) that queries the datasource to explain why (metric "did you mean" + culprit label filter); one-click fix reveals a seeded 401 spike.
 - **UC2 — Data looks wrong → find & fix a bug.** Ask traces the graph scaling pipeline to `scaleSeries.ts`; Agent fixes a units bug and turns a failing unit test green (planted, reversible demo artifact).
@@ -31,9 +34,11 @@ Always run setup at the start and reset at the end of a customer session.
 
 ## When to use
 
-- User triggers `/kev-demo-grafana-explore-trace`
-- User asks to run the Grafana Explore Ask + Design Mode demo
+- User triggers `/kev-demo-grafana-explore-trace-start`
+- User asks to start / run the Grafana Explore Ask + Design Mode demo
 - User wants the first FE Value Map demo (Buckets 1–4 + 8)
+
+(Teardown is a separate skill: `/kev-demo-grafana-explore-trace-reset`.)
 
 ## Safety (always)
 
@@ -222,17 +227,14 @@ A safe, reversible bug lives on `demo/explore-trace` (discarded by reset). **Say
 
 ## Wrap-up
 
-### 7. Reset (delete demo branch)
+### 7. Reset (teardown is a separate skill)
+
+When the session ends, tear down with the companion skill **`/kev-demo-grafana-explore-trace-reset`** (it drives `./scripts/demos/reset.sh`, with `--save-kit` to preserve kit work and `--stop-deps` for a full cold teardown). Quick reference:
 
 ```sh
-./scripts/demos/reset.sh
+./scripts/demos/reset.sh            # base branch, delete demo branch, clear state
+./scripts/demos/reset.sh --save-kit # + commit kit to base (local), discard product changes
 ```
-
-Confirm base branch, `.demo-state` gone, no leftover `demo/explore-trace` (unless `--keep-branch`).
-
-**One-command "keep my kit, reset the demo":** `./scripts/demos/reset.sh --save-kit` commits the reusable demo-kit changes onto the base branch (local commit, **not** pushed — prints a `git push origin main` reminder) and discards the live product changes under `public/app` / `pkg`. Encodes the kit-vs-product split so kit work is never lost and the Explore/panel UI + planted bug are always reset.
-
-Profile `reset.sh` removes the provisioned Prometheus datasource and, by default, **leaves the Prometheus container running** for a fast next iteration. For a full cold teardown (stop containers via `make devenv-down`), run `./scripts/demos/explore-trace/reset.sh --stop-deps`. Top-level reset owns branch teardown.
 
 ## Safe change constraints
 

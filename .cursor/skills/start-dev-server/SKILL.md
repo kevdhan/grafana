@@ -42,7 +42,7 @@ yarn start
 
 ### Demo / cold-start (Field Engineer)
 
-For customer demos, prefer the **fast spinup** in `kev-demo-kit` / `kev-demo-grafana-explore-trace`:
+For customer demos, prefer the **fast spinup** in `kev-demo-kit` / `kev-demo-grafana-explore-trace-start`:
 
 1. Ensure `PATH` includes local Go/Node if needed (`~/.local/go/bin`, `~/.local/node/bin`)
 2. Reuse `:3000` when `/login` is already 200

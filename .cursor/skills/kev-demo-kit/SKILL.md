@@ -10,7 +10,7 @@ description: >-
 # Grafana FE demo kit (`kev-demo-kit`)
 
 Personal/FE-owned demo orchestration. Future per-demo skills should also use the
-`kev-` prefix (e.g. `/kev-demo-grafana-explore-trace`) so they cluster in the skill picker.
+`kev-` prefix (e.g. `/kev-demo-grafana-explore-trace-start`) so they cluster in the skill picker.
 
 ## When to use
 
@@ -89,7 +89,7 @@ Confirm you are back on `main` (or the recorded base branch) and `.demo-state` i
 
 | demo-id | Skill | Status | Primary Cursor story |
 |---------|-------|--------|----------------------|
-| explore-trace | `kev-demo-grafana-explore-trace` | ready | Ask: Run → API → Go; Design Mode: Explore `NoData` empty state (Buckets 1–4 + 8) |
+| explore-trace | `kev-demo-grafana-explore-trace-start` (start) / `kev-demo-grafana-explore-trace-reset` (teardown) | ready | UC1: Ask Run → API → Go + Design Mode active-diagnosis empty state; UC2: Agent fixes a units bug via a failing test (Buckets 1–4 + 8) |
 
 Candidate demos (discuss before building):
 
