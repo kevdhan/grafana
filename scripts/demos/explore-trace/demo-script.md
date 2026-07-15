@@ -4,7 +4,7 @@
 **Skills:** `/kev-demo-grafana-explore-trace-start` · `/kev-demo-grafana-explore-trace-reset`  
 **Branch:** `demo/explore-trace` (setup creates, reset deletes)  
 **Timebox:** ~30 min · **Login:** `admin` / `admin` → http://localhost:3000  
-**Cheat sheet:** [`NOTES-BRIEF.md`](./NOTES-BRIEF.md)
+**Cheat sheet:** [`demo-script-short.md`](./demo-script-short.md)
 
 ## Customer pain (Value Map)
 

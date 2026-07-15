@@ -91,8 +91,8 @@ Kit paths staged by `demo_commit_kit_to_base` include `scripts/demos/**` and `.c
 
 | File | Role |
 |------|------|
-| `scripts/demos/explore-trace/NOTES.md` | Full talk track (detailed) |
-| `scripts/demos/explore-trace/NOTES-BRIEF.md` | Live-demo cheat sheet (Preview-friendly) |
+| `scripts/demos/explore-trace/demo-script.md` | Full talk track (detailed) |
+| `scripts/demos/explore-trace/demo-script-short.md` | Live-demo cheat sheet (Preview-friendly) |
 | `.cursor/skills/kev-demo-grafana-explore-trace-*` | start / reset / health skills |
 
 Product plants (`limitSeries.ts`, `GraphContainer.tsx` wiring, UC1 Design Mode edits under `public/app`) are discarded.
@@ -102,4 +102,4 @@ Product plants (`limitSeries.ts`, `GraphContainer.tsx` wiring, UC1 Design Mode e
 - Start / run the demo: `/kev-demo-grafana-explore-trace-start`
 - Orchestrator: `/kev-demo-kit`
 - Scripts: `scripts/demos/reset.sh`, `scripts/demos/explore-trace/reset.sh`
-- Talk track: `NOTES.md` · cheat sheet: `NOTES-BRIEF.md`
+- Talk track: `demo-script.md` · cheat sheet: `demo-script-short.md`

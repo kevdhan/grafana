@@ -1,6 +1,6 @@
 # explore-trace — cheat sheet
 
-Full talk track: [`NOTES.md`](./NOTES.md)  
+Full talk track: [`demo-script.md`](./demo-script.md)  
 **Skills:** `/kev-demo-grafana-explore-trace-start` · `/kev-demo-grafana-explore-trace-reset`  
 **Login:** `admin` / `admin` → http://localhost:3000 · **Branch:** `demo/explore-trace`
 

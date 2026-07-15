@@ -65,8 +65,8 @@ echo "  [ ] Explore ready:    open /explore, Prometheus empty query (or TestData
 echo "  [ ] Agents Window:    Cmd+Shift+P → Open Agents Window → Browser"
 echo "  [ ] Design Mode:      Cmd+Shift+D (after page fully loads)"
 echo ""
-echo "  Talk track: scripts/demos/explore-trace/NOTES.md"
-  echo "  Cheat sheet: scripts/demos/explore-trace/NOTES-BRIEF.md"
+echo "  Talk track: scripts/demos/explore-trace/demo-script.md"
+  echo "  Cheat sheet: scripts/demos/explore-trace/demo-script-short.md"
 echo "  Skill trigger:        /kev-demo-grafana-explore-trace-start (reset: /kev-demo-grafana-explore-trace-reset)"
 
 # Always print the gate last so the agent can parse it.

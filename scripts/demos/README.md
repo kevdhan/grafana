@@ -19,13 +19,13 @@
 #   setup.sh          create demo/<id> branch + write .demo-state
 #   reset.sh          checkout base, delete demo branch, clear state
 #   _template/        copy when adding a new demo profile
-#   <demo-id>/        per-demo NOTES.md + optional setup.sh/reset.sh
+#   <demo-id>/        per-demo demo-script.md + optional setup.sh/reset.sh
 # ```
 #
 # ## Adding a demo
 #
 # 1. Copy `_template/` → `<demo-id>/`
-# 2. Fill in `NOTES.md` (talk track + Cursor prompts + safe change)
+# 2. Fill in `demo-script.md` (talk track + Cursor prompts + safe change)
 # 3. Add a matching skill under `.cursor/skills/kev-demo-<id>/` when ready
 # 4. Wire the id into `.cursor/skills/kev-demo-kit/SKILL.md` catalog
 #

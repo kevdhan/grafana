@@ -39,7 +39,7 @@ Optional: `--force` (recreate), `--from <base-branch>` (default `main`).
 
 Then:
 
-1. Read `scripts/demos/<demo-id>/NOTES.md` if it exists (talk track + prompts).
+1. Read `scripts/demos/<demo-id>/demo-script.md` if it exists (talk track + prompts).
 2. Start servers with the **fast spinup** sequence below (do not proceed on frontend-only readiness).
 3. Confirm `http://localhost:3000/login` returns **200** (admin / admin).
 4. Run the demo beats from NOTES / the matching `kev-demo-*` skill.
@@ -102,7 +102,7 @@ Candidate demos (discuss before building):
 ## Adding a new demo
 
 1. Copy `scripts/demos/_template/` → `scripts/demos/<demo-id>/`
-2. Write `NOTES.md` (pain → prompts → safe change → do-not-touch)
+2. Write `demo-script.md` (pain → prompts → safe change → do-not-touch)
 3. Create `.cursor/skills/kev-demo-<demo-id>/SKILL.md` that calls setup/reset and follows NOTES
 4. Add a row to the catalog table above
 

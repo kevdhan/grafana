@@ -3,12 +3,12 @@
 # Copy this folder to scripts/demos/<demo-id>/ when you lock a customer demo.
 #
 # Required:
-#   NOTES.md     — talk track, Cursor prompts, files to touch, success criteria
+#   demo-script.md   — talk track, Cursor prompts, files to touch, success criteria
 # Optional:
 #   setup.sh     — seed data, feature flags, extra checkout steps (executable)
 #   reset.sh     — undo demo-specific side effects (executable)
 
-## Suggested NOTES.md sections
+## Suggested demo-script.md sections
 
 1. Customer pain this demo addresses (from Feature → Value Map buckets)
 2. Timebox (e.g. 20 min)

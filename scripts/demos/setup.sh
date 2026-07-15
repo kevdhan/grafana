@@ -110,12 +110,12 @@ if [[ -d "${PROFILE_DIR}" ]]; then
   elif [[ -f "${PROFILE_DIR}/setup.sh" ]]; then
     demo_warn "Found ${PROFILE_DIR}/setup.sh but it is not executable; skipping"
   fi
-  if [[ -f "${PROFILE_DIR}/NOTES.md" ]]; then
-    demo_log "Demo notes: ${PROFILE_DIR}/NOTES.md"
+  if [[ -f "${PROFILE_DIR}/demo-script.md" ]]; then
+    demo_log "Demo notes: ${PROFILE_DIR}/demo-script.md"
   fi
 else
   demo_warn "No profile folder at scripts/demos/${DEMO_ID}/ yet (scaffold only)."
-  demo_warn "Add NOTES.md + optional setup.sh/reset.sh there when you lock the demo."
+  demo_warn "Add demo-script.md + optional setup.sh/reset.sh there when you lock the demo."
 fi
 
 cat <<EOF
