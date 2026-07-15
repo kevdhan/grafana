@@ -15,12 +15,13 @@ Full talk track: [`demo-script.md`](./demo-script.md)
 
 ```sh
 ./scripts/demos/setup.sh explore-trace   # unsandboxed; follow === DEMO READINESS ===
-# NOT READY → start FE/BE as durable background shells (exec …), then re-run:
+# NOT READY → start FE/BE/traffic as durable background shells (exec …), then re-run:
 ./scripts/demos/explore-trace/setup.sh
 ```
 
 - PATH: `export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"`
 - Backend: `./bin/grafana server …` (avoid `make run-go`) · Frontend: `yarn start` (unsandboxed; `unset` polling env)
+- Traffic: durable shell after `/login` 200 — `echo $$ > .demo-traffic.pid; exec bash scripts/demos/explore-trace/seed-traffic.sh --watch 12` (never `nohup`)
 - Prometheus `:9090` preferred · 401s = unauthenticated curls, **never** wrong password
 - Shortcuts: Agents Window `Cmd+Shift+P` · Design Mode `Cmd+Shift+D`
 

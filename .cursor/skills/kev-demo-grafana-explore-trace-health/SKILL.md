@@ -98,12 +98,14 @@ else
   row YELLOW "Frontend HMR" "no watcher — Design Mode won't hot-reload; run 'yarn start' UNSANDBOXED"
 fi
 
-# 8. Background traffic generator (keeps the 401 spike fresh for time windows)
+# 8. Background traffic generator (durable shell; keeps the 401 spike fresh)
 pid=$(cat .demo-traffic.pid 2>/dev/null)
 if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
   row GREEN "Traffic generator" "running (pid ${pid})"
+elif pgrep -f 'seed-traffic\.sh --watch' >/dev/null 2>&1; then
+  row YELLOW "Traffic generator" "running but .demo-traffic.pid stale — re-run profile setup to record pid"
 else
-  row YELLOW "Traffic generator" "stopped — UC1 401 spike will fade; run 'seed-traffic.sh --watch'"
+  row YELLOW "Traffic generator" "stopped — start durable shell: exec bash scripts/demos/explore-trace/seed-traffic.sh --watch 12"
 fi
 
 # 9. Error data present (UC1 payoff): 401 rate > 0 over 5m
@@ -148,7 +150,7 @@ cards) instead of a table — but the table is the fast default.
 | Grafana backend | `/login` 200 | backend not running / cold-starting |
 | Datasource | proxy health `OK` | not provisioned → re-run start (reload API) |
 | Frontend HMR | webpack watcher alive | not started, or `yarn start` sandboxed (EMFILE) → run unsandboxed |
-| Traffic generator | `.demo-traffic.pid` alive | reaped/stopped → `seed-traffic.sh --watch` |
+| Traffic generator | `.demo-traffic.pid` alive (durable shell) | stopped → durable `exec bash …/seed-traffic.sh --watch 12` (never nohup); re-run profile setup |
 | Error data | 401 rate > 0 over 5m | generator just started/stopped → wait or restart |
 
 ## Safety

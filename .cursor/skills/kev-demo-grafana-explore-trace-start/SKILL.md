@@ -60,7 +60,7 @@ Agent `Shell` calls run **sandboxed by default**, which silently breaks three th
 | Anything Docker (`setup.sh`, `docker …`, `make devenv`) | Docker socket blocked → `docker info` fails → **false TestData fallback** | Run unsandboxed |
 | Frontend `yarn start` | FSEvents blocked → `EMFILE: too many open files` → watcher dies in ~10s | Run unsandboxed |
 | `go mod download` / backend build | `GOMODCACHE`/`GOCACHE` redirected to a temp sandbox cache → re-downloads | Run unsandboxed (or pin `$HOME` caches) |
-| Long-lived servers via `nohup … &` in a one-shot Shell | Process group dies when the Shell tool exits → `/login` flips to `000`, traffic pid goes stale | Use Cursor **background** shells (`block_until_ms: 0`) with `exec` |
+| Long-lived servers via `nohup … &` in a one-shot Shell | Process group dies when the Shell tool exits → `/login` flips to `000`, traffic/FE/BE pids go stale | Use Cursor **background** shells (`block_until_ms: 0`) with `exec` for backend, frontend, **and traffic** |
 
 Also: **exported env vars persist across `Shell` calls** in a session — a stray `CHOKIDAR_USEPOLLING`/`WATCHPACK_POLLING` will poison later `yarn start` restarts. `unset` them.
 
@@ -79,8 +79,10 @@ Profile `scripts/demos/explore-trace/setup.sh` runs automatically and now:
 
 1. **Plants UC2** via `plant-uc2.sh` (copies fixtures → `limitSeries.ts` + failing test, wires `GraphContainer.tsx`, re-breaks the cap to `1` if a prior Agent fix left it green)
 2. Ensures Prometheus (or TestData fallback) + datasource provisioning
-3. Starts/verifies the **traffic** generator when `/login` is already 200 (and survives Grafana blips — soft curl)
+3. **Records** (does not spawn) backend / frontend / traffic pids when those durable shells are already alive
 4. Prints a final **`=== DEMO READINESS ===`** block
+
+Setup **never** starts traffic via `nohup` — that dies when the one-shot Shell exits and leaves a stale `.demo-traffic.pid`.
 
 ### 2. Parse the readiness gate
 
@@ -97,12 +99,12 @@ status:    READY|NOT READY
 === END READINESS ===
 ```
 
-- **`status: READY`** (and `uc2-plant: OK`, `login: OK`) → skip to Beat 1. Do not restart healthy servers.
+- **`status: READY`** (login + frontend + traffic + uc2-plant all OK) → skip to Beat 1. Do not restart healthy servers.
 - **`status: NOT READY`** → go to step 3. Do **not** explore the repo looking for missing files — setup already told you what failed.
 
 ### 3. Start only what the gate says is missing (durable shells)
 
-If `login: FAIL` and/or `frontend: FAIL`, start them as **separate Cursor background shells**:
+If `login: FAIL`, `frontend: FAIL`, and/or `traffic: FAIL`, start the missing ones as **separate Cursor background shells**:
 
 - `required_permissions: ["all"]`
 - `block_until_ms: 0`
@@ -123,17 +125,26 @@ unset CHOKIDAR_USEPOLLING CHOKIDAR_INTERVAL WATCHPACK_POLLING
 exec yarn start
 ```
 
-**Never** start backend/frontend with `nohup … &` inside a one-shot Shell — that was the main failure mode that made `/login` flip to `000` mid-demo.
+```sh
+# Traffic — ONLY after /login → 200 (keeps 401/404 spike fresh for UC1)
+# Write the pidfile before exec so reset can stop this shell cleanly.
+export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"
+cd "$(git rev-parse --show-toplevel)"
+echo $$ > .demo-traffic.pid
+exec bash scripts/demos/explore-trace/seed-traffic.sh --watch 12
+```
 
-Await `/login → 200` (and webpack “Compiled” for HMR), then **re-run**:
+**Never** start backend / frontend / traffic with `nohup … &` inside a one-shot Shell — that was the failure mode that made `/login` flip to `000` and left a dead traffic pid mid-demo.
+
+Order: backend + frontend first → await `/login → 200` (and webpack “Compiled”) → traffic durable shell → **re-run**:
 
 ```sh
 ./scripts/demos/explore-trace/setup.sh
 ```
 
-That **records server pids** (`.demo-backend.pid` / `.demo-frontend.pid` for reset), re-attaches traffic, re-verifies the UC2 plant, and reprints the gate. Loop until `READY`.
+That **records server + traffic pids** (`.demo-backend.pid` / `.demo-frontend.pid` / `.demo-traffic.pid` for reset), re-verifies the UC2 plant, and reprints the gate. Loop until `READY`.
 
-**Why reset stops FE/BE:** Cursor terminals belong to the chat that started them. After reset, the next demo is usually a **new chat** — leaving servers up would make start silently reuse invisible processes. Reset stops Grafana backend/frontend by default (Prometheus stays); start relaunches them here so terminals are native to this chat.
+**Why reset stops FE/BE/traffic:** Cursor terminals belong to the chat that started them. After reset, the next demo is usually a **new chat** — leaving them up would make start silently reuse invisible processes. Reset stops Grafana backend/frontend **and traffic** by default (Prometheus stays); start relaunches them here so terminals are native to this chat.
 
 ### 4. What setup owns (so you don't)
 
@@ -141,7 +152,7 @@ That **records server pids** (`.demo-backend.pid` / `.demo-frontend.pid` for res
 |---------|-------|-------|
 | UC2 `limitSeries.ts` plant (cap=`1`) + failing test + `GraphContainer` wire | `plant-uc2.sh` via profile setup | Fixtures live under `scripts/demos/explore-trace/fixtures/` |
 | UC2 cleanup on teardown | `unplant-uc2.sh` via profile reset | Also covered by `--save-kit` product discard |
-| Traffic generator | `demo_ensure_traffic` | Soft-curl so Grafana restarts don't kill `--watch` |
+| Traffic generator | **Agent durable shell** + `demo_ensure_traffic` / `demo_record_traffic_pid` | Setup only verifies/records; soft_curl survives Grafana blips |
 | Prometheus vs TestData | `demo_ensure_prometheus` | Warns on sandboxed Docker socket |
 | Readiness summary | `demo_print_readiness` | Agent parses this; don't reinvent checks |
 
@@ -154,8 +165,10 @@ That **records server pids** (`.demo-backend.pid` / `.demo-frontend.pid` for res
 
 ### Traffic / 401 safety
 
+- Start traffic as a **durable background shell** (see step 3) — not via setup/`nohup`.
 - 401s come from **unauthenticated** requests (`curl` with no `-u`), **never** `admin:wrongpass` (locks admin ~5 min).
 - Continuous `--watch` keeps `rate()[5m|15m|60m]` fresh; one-shot bursts decay.
+- Prefer Node **v24** from `.nvmrc` for `yarn start` when `~/.local/node` is older (webpack `.ts` config fails on Node 22).
 
 ### Backend tips
 

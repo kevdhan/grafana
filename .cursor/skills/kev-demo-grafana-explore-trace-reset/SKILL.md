@@ -35,6 +35,7 @@ Companion to **`/kev-demo-grafana-explore-trace-start`**.
 3. `--clean-untracked` is destructive (removes untracked files) — only pass it if the user explicitly wants it, and it requires `--force`.
 4. If `.demo-state` names a **different** demo than expected, confirm before resetting.
 5. `--save-kit` makes a **local** commit only and prints a `git push origin main` reminder — do not auto-push; let the user approve the push.
+6. Do **not** hand-kill traffic/FE/BE with ad-hoc `pkill` unless `reset.sh` failed — prefer the script’s `demo_stop_traffic` / `demo_stop_grafana_servers`.
 
 ## Steps
 
@@ -51,7 +52,8 @@ If `.demo-state` is missing, there's nothing to reset — say so and stop.
 **Always reset with `--save-kit` unless the user explicitly asks otherwise.** Standard teardown:
 
 - Commits reusable kit onto the base branch (local), discards `public/app` / `pkg` product changes
-- Stops traffic generator + **Grafana backend + frontend** (so a *new* Cursor chat’s start skill relaunches them → native terminals in that chat)
+- **Stops the durable traffic shell** (`demo_stop_traffic`: `.demo-traffic.pid` + `pgrep` fallback for `seed-traffic.sh --watch`) — always, even with `--keep-servers`
+- Stops **Grafana backend + frontend** (so a *new* Cursor chat’s start skill relaunches them → native terminals in that chat)
 - Unplants UC2 (`unplant-uc2.sh`)
 - Removes provisioned Prometheus datasource
 - **Leaves Prometheus container running** on `:9090` (fast next spinup)
@@ -66,8 +68,8 @@ Only deviate if the user explicitly requests it:
 
 | Situation | Command |
 |-----------|---------|
-| **Default — keep kit, stop FE/BE, keep Prometheus** | `./scripts/demos/reset.sh --save-kit` |
-| Same-chat iteration — leave FE/BE up | add `--keep-servers` |
+| **Default — keep kit, stop traffic + FE/BE, keep Prometheus** | `./scripts/demos/reset.sh --save-kit` |
+| Same-chat iteration — leave FE/BE up (traffic still stopped) | add `--keep-servers` |
 | Discard EVERYTHING including uncommitted kit (rare — confirm first) | `./scripts/demos/reset.sh --force --clean-untracked` |
 | Keep the local demo branch | add `--keep-branch` |
 | Full cold teardown (also stop Prometheus/devenv) | add `--stop-deps` (or run profile `reset.sh --stop-deps` then the reset above) |
@@ -82,8 +84,9 @@ Only deviate if the user explicitly requests it:
 - `git status --short` → clean (product changes discarded)
 - `.demo-state` gone; local `demo/explore-trace` deleted (unless `--keep-branch`)
 - `/login` should **not** be 200 (FE/BE stopped) unless `--keep-servers`
+- **Traffic stopped:** no live `seed-traffic.sh --watch`; `.demo-traffic.pid` gone
 - Prometheus `:9090` still healthy unless `--stop-deps`
-- This chat’s backend/frontend terminal tabs should end once those processes exit
+- This chat’s backend / frontend / **traffic** terminal tabs should end once those processes exit
 
 ## Notes / kit files preserved by `--save-kit`
 

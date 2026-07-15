@@ -40,6 +40,7 @@ echo ""
 if demo_login_ok; then
   demo_log "Grafana already healthy on :3000 (/login → 200) — reuse; do not restart"
   demo_record_grafana_server_pids || true
+  # Record durable-shell traffic if present; never spawn via nohup (dies with the Shell tool).
   demo_ensure_traffic || true
 else
   demo_log "Grafana not ready on :3000 — warming modules before any backend start"
@@ -51,7 +52,8 @@ else
   demo_backend_cmd_hint | sed 's/^/     /'
   echo "  3. Wait until: curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login → 200"
   echo "     (Frontend 'Compiled successfully' alone is NOT enough.)"
-  echo "  4. Re-run this script to record server pids, attach traffic + re-print the readiness gate:"
+  echo "  4. Traffic (after /login → 200): echo \$\$ > .demo-traffic.pid; exec bash scripts/demos/explore-trace/seed-traffic.sh --watch 12"
+  echo "  5. Re-run this script to record server/traffic pids + re-print the readiness gate:"
   echo "       ./scripts/demos/explore-trace/setup.sh"
   echo ""
 fi
@@ -60,13 +62,14 @@ echo "  Checklist before the live beats:"
 echo "  [ ] PATH: go/node visible (often ~/.local/go/bin + ~/.local/node/bin)"
 echo "  [ ] Backend healthy:  /login → 200 (reuse if already up)"
 echo "  [ ] Frontend:         yarn start → HMR for Design Mode"
+echo "  [ ] Traffic:          durable shell seed-traffic.sh --watch (401/404 spike)"
 echo "  [ ] Login:            admin / admin"
 echo "  [ ] Explore ready:    open /explore, Prometheus empty query (or TestData No Data Points)"
 echo "  [ ] Agents Window:    Cmd+Shift+P → Open Agents Window → Browser"
 echo "  [ ] Design Mode:      Cmd+Shift+D (after page fully loads)"
 echo ""
 echo "  Talk track: scripts/demos/explore-trace/demo-script.md"
-  echo "  Cheat sheet: scripts/demos/explore-trace/demo-script-short.md"
+echo "  Cheat sheet: scripts/demos/explore-trace/demo-script-short.md"
 echo "  Skill trigger:        /kev-demo-grafana-explore-trace-start (reset: /kev-demo-grafana-explore-trace-reset)"
 
 # Always print the gate last so the agent can parse it.

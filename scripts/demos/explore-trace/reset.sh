@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # explore-trace: demo-specific teardown.
-#   - Stops traffic + Grafana backend/frontend by default (so the *next* Cursor
-#     chat's start skill relaunches them → native terminals in that chat).
+#   - Stops traffic (durable-shell seed-traffic --watch) + Grafana backend/frontend
+#     by default (so the *next* Cursor chat's start skill relaunches them → native
+#     terminals in that chat). Traffic is always stopped — even with --keep-servers.
 #   - Leaves the Prometheus container RUNNING by default (fast reuse).
 #   - Pass --keep-servers to leave FE/BE up (same-chat iteration).
 #   - Pass --stop-deps for a cold teardown (also stop Prometheus/devenv).
@@ -23,7 +24,7 @@ done
 
 echo "→ (explore-trace) demo-specific reset"
 
-# Stop the background traffic generator started by setup.
+# Stop durable-shell traffic (pidfile + pgrep fallback for seed-traffic.sh --watch).
 demo_stop_traffic
 
 # Remove UC2 plant (untracked limitSeries* + GraphContainer restore) so files

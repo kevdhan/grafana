@@ -308,62 +308,68 @@ demo_frontend_watcher_ok() {
   pgrep -f 'nx run grafana:start|webpack|webpack-cli' >/dev/null 2>&1
 }
 
-# Start the continuous traffic generator in the background (idempotent + verified).
-# Survives Grafana blips (seed-traffic soft_curl) and stale pidfiles.
-demo_start_traffic() {
-  local script="${DEMOS_ROOT}/explore-trace/seed-traffic.sh"
-  local pidfile logfile
+# Discover a live seed-traffic --watch process and write .demo-traffic.pid.
+# Used after the start skill launches traffic as a durable Cursor background shell
+# (never nohup from a one-shot Shell — that process group dies when the Shell exits).
+demo_record_traffic_pid() {
+  require_repo_root
+  local pidfile tpid
   pidfile="$(demo_traffic_pidfile)"
-  logfile="$(demo_traffic_logfile)"
-  [[ -f "${script}" ]] || return 0
-
   if demo_traffic_ok; then
-    demo_log "Traffic generator already running (pid $(cat "${pidfile}"))"
     return 0
   fi
-  # Stale pidfile from a previous dead process.
   rm -f "${pidfile}"
-
-  # Launch via a subshell + nohup so the watcher outlives setup.sh.
-  # Log to .demo-traffic.log (gitignored via .demo-traffic.pid pattern? add log to gitignore).
-  # shellcheck disable=SC2086
-  nohup bash "${script}" --watch 12 >>"${logfile}" 2>&1 &
-  echo $! >"${pidfile}"
-  # Give it a moment; verify it stayed up (catches instant set -e deaths).
-  sleep 1
-  if demo_traffic_ok; then
-    demo_log "Started continuous traffic generator (pid $(cat "${pidfile}")) — keeps 200/401/404 fresh for 5m/15m/60m windows"
+  # Prefer the watch loop started by the durable shell / setup contract.
+  tpid="$(pgrep -f 'seed-traffic\.sh --watch' 2>/dev/null | head -1 || true)"
+  if [[ -z "${tpid}" ]]; then
+    tpid="$(pgrep -f 'scripts/demos/explore-trace/seed-traffic\.sh' 2>/dev/null | head -1 || true)"
+  fi
+  if [[ -n "${tpid}" ]]; then
+    echo "${tpid}" >"${pidfile}"
+    demo_log "Recorded traffic pid ${tpid} → ${pidfile}"
     return 0
   fi
-  demo_warn "Traffic generator failed to stay up — see ${logfile}"
-  rm -f "${pidfile}"
   return 1
 }
 
-# Ensure traffic is running when Grafana is up; restart if the pidfile is stale.
+# Ensure traffic is running when Grafana is up. Does NOT spawn via nohup —
+# the start skill must launch seed-traffic as a durable Cursor background shell.
 demo_ensure_traffic() {
   if ! demo_login_ok; then
-    demo_log "Grafana not up yet — skip traffic until /login → 200, then re-run profile setup.sh"
+    demo_log "Grafana not up yet — skip traffic until /login → 200, then start durable traffic shell + re-run profile setup.sh"
     return 1
   fi
   if demo_traffic_ok; then
     demo_log "Traffic generator healthy (pid $(cat "$(demo_traffic_pidfile)"))"
     return 0
   fi
-  demo_start_traffic
+  # Stale pidfile or durable shell started without writing the pidfile yet.
+  if demo_record_traffic_pid && demo_traffic_ok; then
+    demo_log "Traffic generator healthy (pid $(cat "$(demo_traffic_pidfile)"))"
+    return 0
+  fi
+  demo_log "Traffic generator not running — agent must start as a durable Cursor background shell"
+  demo_log "  (block_until_ms:0, required_permissions:[\"all\"], exec — never nohup in a one-shot Shell):"
+  demo_log "    echo \$\$ > .demo-traffic.pid"
+  demo_log "    exec bash scripts/demos/explore-trace/seed-traffic.sh --watch 12"
+  demo_log "  Then re-run: ./scripts/demos/explore-trace/setup.sh"
+  return 1
 }
 
-# Stop the continuous traffic generator (used by reset).
+# Stop the continuous traffic generator (used by reset). Pidfile first, then
+# pgrep fallbacks so durable-shell traffic is cleaned even if the pidfile was stale.
 demo_stop_traffic() {
-  local pidfile
-  pidfile="$(demo_traffic_pidfile)"
-  [[ -f "${pidfile}" ]] || return 0
-  local pid
-  pid="$(cat "${pidfile}" 2>/dev/null || true)"
-  if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
-    kill "${pid}" 2>/dev/null && demo_log "Stopped traffic generator (pid ${pid})"
-  fi
-  rm -f "${pidfile}"
+  require_repo_root
+  demo_kill_pidfile_tree "$(demo_traffic_pidfile)" "traffic generator"
+
+  local p
+  for p in $(pgrep -f 'seed-traffic\.sh --watch|scripts/demos/explore-trace/seed-traffic\.sh' 2>/dev/null || true); do
+    kill "${p}" 2>/dev/null || true
+    sleep 0.2
+    kill -9 "${p}" 2>/dev/null || true
+    demo_log "Stopped traffic generator (pid ${p}, no/stale pidfile)"
+  done
+  rm -f "$(demo_traffic_pidfile)"
 }
 
 # --- Grafana backend / frontend (chat-scoped; stopped on reset by default) ---
@@ -467,16 +473,17 @@ demo_stop_grafana_servers() {
 }
 
 # Print a machine-readable readiness gate for the agent skill. Exit 0 only when
-# the minimum bar for live beats is met (login + UC2 plant). Frontend/traffic
-# are reported but do not fail the gate alone — the skill restarts them.
+# login + frontend HMR + traffic + UC2 plant are all OK (full live-demo bar).
 demo_print_readiness() {
   local login="FAIL" prom="n/a" traffic="FAIL" frontend="FAIL" uc2="FAIL"
   local ready=1
 
   if demo_login_ok; then login="OK"; else ready=0; fi
   if demo_prometheus_ok; then prom="OK"; elif [[ -f "$(demo_datasource_file)" ]]; then prom="DOWN"; else prom="TestData"; fi
-  if demo_traffic_ok; then traffic="OK"; fi
-  if demo_frontend_watcher_ok; then frontend="OK"; fi
+  # Discover durable-shell traffic before scoring the gate.
+  demo_record_traffic_pid >/dev/null 2>&1 || true
+  if demo_traffic_ok; then traffic="OK"; else ready=0; fi
+  if demo_frontend_watcher_ok; then frontend="OK"; else ready=0; fi
   if [[ -f "${REPO_ROOT}/public/app/features/explore/Graph/limitSeries.ts" ]] \
     && grep -q "data.length : 1" "${REPO_ROOT}/public/app/features/explore/Graph/limitSeries.ts" 2>/dev/null \
     && grep -q "limitSeriesForDisplay" "${REPO_ROOT}/public/app/features/explore/Graph/GraphContainer.tsx" 2>/dev/null; then
@@ -506,6 +513,10 @@ demo_print_readiness() {
     fi
     if [[ "${frontend}" != "OK" ]]; then
       echo "             Frontend: unset CHOKIDAR_USEPOLLING CHOKIDAR_INTERVAL WATCHPACK_POLLING; yarn start"
+    fi
+    if [[ "${traffic}" != "OK" ]]; then
+      echo "             Traffic:  echo \$\$ > .demo-traffic.pid; exec bash scripts/demos/explore-trace/seed-traffic.sh --watch 12"
+      echo "                       (only after /login → 200; soft_curl survives Grafana blips)"
     fi
   fi
   echo "=== END READINESS ==="
