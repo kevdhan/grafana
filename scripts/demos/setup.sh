@@ -74,13 +74,18 @@ if [[ -f "${STATE_FILE}" ]]; then
   demo_warn "Overwriting existing demo state (was ${DEMO_ID:-?} / ${DEMO_BRANCH:-?})"
 fi
 
-demo_log "Fetching origin/${BASE} (best effort)…"
-git fetch origin "${BASE}" 2>/dev/null || demo_warn "Could not fetch origin/${BASE}; using local refs"
+git fetch origin "${BASE}" 2>/dev/null || true
 
-if git show-ref --verify --quiet "refs/remotes/origin/${BASE}"; then
-  START_REF="origin/${BASE}"
-elif git show-ref --verify --quiet "refs/heads/${BASE}"; then
+# Prefer the LOCAL base branch. The demo kit (rules, hooks, subagents, skills,
+# script fixes) is committed to local `${BASE}` and intentionally NOT pushed, so
+# branching from origin/${BASE} would start the demo without the kit. Fall back
+# to origin only when there is no local base branch (e.g. a fresh clone).
+if git show-ref --verify --quiet "refs/heads/${BASE}"; then
   START_REF="${BASE}"
+  demo_log "Using LOCAL ${BASE} as the demo base (kit lives here; not pushed)"
+elif git show-ref --verify --quiet "refs/remotes/origin/${BASE}"; then
+  START_REF="origin/${BASE}"
+  demo_warn "No local ${BASE}; falling back to origin/${BASE} (may be missing the local kit)"
 else
   demo_die "Base branch '${BASE}' not found locally or on origin"
 fi
