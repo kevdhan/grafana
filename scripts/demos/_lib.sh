@@ -567,12 +567,31 @@ demo_commit_kit_to_base() {
   git add -- scripts/demos .cursor/skills .cursor/agents .cursor/hooks \
     .cursor/rules/demo-safety.mdc .cursor/rules/grafana-frontend-conventions.mdc \
     .gitignore 2>/dev/null || true
+  # .cursor/hooks.json is actively rewritten by Cursor's hook manager; re-stage it
+  # immediately before the commit to shrink the race window where its latest
+  # state (e.g. the format-frontend registration) could be missed.
+  git add -- .cursor/hooks.json 2>/dev/null || true
   if git diff --cached --quiet; then
     demo_log "No demo-kit changes to commit"
     return 0
   fi
-  git commit -m "demo: update demo kit (auto-saved on reset)" >/dev/null
+  # Commit the kit. If no git identity is configured (common on demo machines),
+  # supply a fallback author/committer via env vars for THIS commit only — we
+  # never modify git config.
+  if git config user.name >/dev/null 2>&1 && git config user.email >/dev/null 2>&1; then
+    git commit -m "demo: update demo kit (auto-saved on reset)" >/dev/null
+  else
+    GIT_AUTHOR_NAME="FE Demo Kit" GIT_AUTHOR_EMAIL="demo-kit@localhost" \
+    GIT_COMMITTER_NAME="FE Demo Kit" GIT_COMMITTER_EMAIL="demo-kit@localhost" \
+      git commit -m "demo: update demo kit (auto-saved on reset)" >/dev/null
+  fi
   demo_log "Committed demo-kit changes"
+  # Verify the hooks.json registration actually landed; the hook-manager race can
+  # still drop it, so warn loudly rather than silently shipping an unregistered hook.
+  if grep -q "format-frontend" .cursor/hooks.json 2>/dev/null \
+     && ! git show HEAD:.cursor/hooks.json 2>/dev/null | grep -q "format-frontend"; then
+    demo_warn ".cursor/hooks.json format-frontend registration was not captured in the kit commit; commit .cursor/hooks.json manually or re-run reset once the tree is quiet"
+  fi
   # Only move base if it's a true fast-forward (base is an ancestor of HEAD).
   if git merge-base --is-ancestor "${base}" HEAD 2>/dev/null; then
     git branch -f "${base}" HEAD

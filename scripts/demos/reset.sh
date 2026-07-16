@@ -84,6 +84,14 @@ fi
 if [[ "${SAVE_KIT}" == "1" ]]; then
   demo_commit_kit_to_base "${BASE_BRANCH}"
   demo_discard_product_changes
+  # The kit is now committed to base. Cursor's hook manager may immediately
+  # re-dirty tracked kit files (notably .cursor/hooks.json); restore the committed
+  # kit paths so this self-inflicted churn doesn't trip the dirty-tree guard below
+  # and abort teardown. Product changes were already discarded above.
+  git restore --staged --worktree -- \
+    scripts/demos .cursor/skills .cursor/agents .cursor/hooks \
+    .cursor/rules/demo-safety.mdc .cursor/rules/grafana-frontend-conventions.mdc \
+    .gitignore 2>/dev/null || true
 fi
 
 if [[ -n "$(git status --porcelain)" ]]; then

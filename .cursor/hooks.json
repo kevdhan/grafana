@@ -6,6 +6,11 @@
         "command": ".cursor/hooks/enforce-fieldsphere-gh.sh",
         "matcher": "(^|\\s)gh(\\s|$)"
       }
+    ],
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/format-frontend.sh"
+      }
     ]
   }
 }
