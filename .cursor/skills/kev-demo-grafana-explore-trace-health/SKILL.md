@@ -5,7 +5,7 @@ description: >-
   read-only probe of every dependency the demo needs (toolchain, demo branch +
   state, Docker daemon, Prometheus container, Grafana backend, the provisioned
   Prometheus datasource, frontend HMR watcher, the background traffic generator,
-  and whether the 401 error data is present) and reports each as green / yellow /
+  whether the 401 error data is present, and the UC2 Cursor kit primitives) and reports each as green / yellow /
   red with a short problem description and fix. Use when the user says demo
   health, demo status, is everything running, check the explore-trace demo,
   diagnose the demo, or /kev-demo-grafana-explore-trace-health. Companion to
@@ -118,7 +118,25 @@ if awk "BEGIN{exit !(${v:-0}>0)}" 2>/dev/null; then
 else
   row YELLOW "Error data (401 spike)" "401 rate 0 over 5m — traffic just started/stopped; wait ~30s or start generator"
 fi
+
+# 10. UC2 Cursor primitives (git-tracked kit — needed for the Customize tour + delegated fix)
+missing=""
+for f in .cursor/rules/grafana-frontend-conventions.mdc \
+         .cursor/skills/run-frontend-test/SKILL.md \
+         .cursor/hooks/format-frontend.sh .cursor/hooks.json \
+         .cursor/agents/plan-executor.md; do
+  [ -f "$f" ] || missing="${missing} ${f##*/}"
+done
+if [ -z "$missing" ]; then
+  row GREEN "UC2 kit primitives" "rule + skill + hooks + plan-executor present"
+else
+  row YELLOW "UC2 kit primitives" "missing:${missing} — restore from base (reset --save-kit preserves these)"
+fi
 ```
+
+> External UC2 dependencies — the Jira MCP (`fe-anysphere-demo`, ticket `KHS-6`) and
+> the GitHub Bugbot repo (`internalsphere/kev-grafana`, PR #2) — live outside this
+> repo and outside this probe. Confirm MCP/GitHub auth separately before demoing UC2.
 
 ## Output — render a traffic-light table
 
@@ -152,6 +170,7 @@ cards) instead of a table — but the table is the fast default.
 | Frontend HMR | webpack watcher alive | not started, or `yarn start` sandboxed (EMFILE) → run unsandboxed |
 | Traffic generator | `.demo-traffic.pid` alive (durable shell) | stopped → durable `exec bash …/seed-traffic.sh --watch 12` (never nohup); re-run profile setup |
 | Error data | 401 rate > 0 over 5m | generator just started/stopped → wait or restart |
+| UC2 kit primitives | rule + `run-frontend-test` skill + hooks + `plan-executor` present | missing → restore from base (`reset --save-kit` preserves them); Jira MCP + `internalsphere/kev-grafana` are external — check auth separately |
 
 ## Safety
 

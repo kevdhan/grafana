@@ -19,7 +19,8 @@ Reads .demo-state, checks out the base branch, deletes the local demo branch
 
 Options:
   --save-kit         Before teardown, commit the reusable demo-kit changes
-                     (scripts/demos, .cursor/skills, demo-safety rule, .gitignore)
+                     (scripts/demos, .cursor/skills, .cursor/agents, .cursor/hooks,
+                     the demo-safety + grafana-frontend-conventions rules, .gitignore)
                      onto the base branch (local commit — NOT pushed), then
                      discard the live product changes under public/app and pkg.
                      This is the one-command "keep my kit, reset the demo" path.

@@ -7,8 +7,12 @@ description: >-
   backend/frontend (so the next chat owns fresh terminals), unplants UC2, and
   removes the provisioned Prometheus datasource (leaving the Prometheus
   container running by default). Defaults to --save-kit: commits the reusable
-  kit to the base branch and discards only the throwaway product changes, so kit
-  work is never lost. Use when the user says reset the explore-trace demo,
+  kit (scripts/demos, the demo skills, and the now-git-tracked Cursor primitives —
+  .cursor/agents, .cursor/hooks, .cursor/rules/grafana-frontend-conventions.mdc,
+  .cursor/skills/run-frontend-test, .gitignore allowlist) to the base branch and
+  discards only the throwaway product changes, so kit work is never lost. External
+  artifacts (Jira KHS-6, the internalsphere/kev-grafana Bugbot repo) live outside
+  the repo and persist across resets — reset never deletes them. Use when the user says reset the explore-trace demo,
   tear down the demo, end the demo, clean up after the demo, or
   /kev-demo-grafana-explore-trace-reset. Companion to the start skill
   /kev-demo-grafana-explore-trace-start.
@@ -21,6 +25,10 @@ Tears down an active **explore-trace** demo by driving `./scripts/demos/reset.sh
 Companion to **`/kev-demo-grafana-explore-trace-start`**.
 
 **Default behavior: `--save-kit`.** This skill always resets with `--save-kit` unless the user explicitly asks for a different flavor — so reusable kit changes are committed to the base branch and only the throwaway product changes (`public/app` / `pkg`) are discarded. You never have to remember the flag.
+
+**What "kit" now covers.** Besides `scripts/demos/**` and the demo skills, the kit now includes the **git-tracked Cursor primitives** developed for UC2's Customize tour — `.cursor/agents/` (`plan-executor.md`), `.cursor/hooks/` (`format-frontend.sh` + `hooks.json` + `enforce-fieldsphere-gh.sh`), `.cursor/rules/grafana-frontend-conventions.mdc`, `.cursor/skills/run-frontend-test/`, and the `.gitignore` allowlist additions that make them trackable. `--save-kit` preserves all of these.
+
+**External artifacts persist (never deleted).** The Jira ticket `KHS-6` (`fe-anysphere-demo` site, project KevinHan-Space) and the Bugbot demo repo `internalsphere/kev-grafana` (+ reusable PR #2) live **outside** this git repo. Reset does **not** touch them — they're reusable across runs. Only recreate `KHS-6` if it's gone missing.
 
 ## When to use
 
@@ -90,19 +98,25 @@ Only deviate if the user explicitly requests it:
 
 ## Notes / kit files preserved by `--save-kit`
 
-Kit paths staged by `demo_commit_kit_to_base` include `scripts/demos/**` and `.cursor/skills/**`, so these survive reset:
+Kit paths staged by `demo_commit_kit_to_base` (`scripts/demos/**`, `.cursor/skills/**`, `.cursor/agents/**`, `.cursor/hooks/**`, the two allowlisted `.cursor/rules/*.mdc`, and `.gitignore`) survive reset:
 
 | File | Role |
 |------|------|
 | `scripts/demos/explore-trace/demo-script.md` | Full talk track (detailed) |
 | `scripts/demos/explore-trace/demo-script-short.md` | Live-demo cheat sheet (Preview-friendly) |
 | `.cursor/skills/kev-demo-grafana-explore-trace-*` | start / reset / health skills |
+| `.cursor/skills/run-frontend-test/` | UC2 skill: correct single-test command for this repo |
+| `.cursor/rules/grafana-frontend-conventions.mdc` | UC2 rule: frontend conventions (Customize tab) |
+| `.cursor/hooks/format-frontend.sh` · `.cursor/hooks.json` · `.cursor/hooks/enforce-fieldsphere-gh.sh` | UC2 hooks: auto-Prettier + gh safety gate |
+| `.cursor/agents/plan-executor.md` | UC2 subagent: Composer 2.5 writer (delegated fix) |
+| `.gitignore` | Allowlist additions that keep `.cursor/agents`, `.cursor/hooks`, and the two rules trackable |
 
-Product plants (`limitSeries.ts`, `GraphContainer.tsx` wiring, UC1 Design Mode edits under `public/app`) are discarded.
+Product plants (`limitSeries.ts`, `GraphContainer.tsx` wiring, UC1 Design Mode edits under `public/app`) are discarded. **External** artifacts (Jira `KHS-6`, `internalsphere/kev-grafana` + PR #2) live outside git and are left untouched — reusable across runs.
 
 ## Related
 
 - Start / run the demo: `/kev-demo-grafana-explore-trace-start`
+- Health check: `/kev-demo-grafana-explore-trace-health`
 - Orchestrator: `/kev-demo-kit`
-- Scripts: `scripts/demos/reset.sh`, `scripts/demos/explore-trace/reset.sh`
+- Scripts: `scripts/demos/reset.sh`, `scripts/demos/explore-trace/reset.sh` (kit staging: `demo_commit_kit_to_base` in `scripts/demos/_lib.sh`)
 - Talk track: `demo-script.md` · cheat sheet: `demo-script-short.md`

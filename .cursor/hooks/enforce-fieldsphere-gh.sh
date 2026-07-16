@@ -21,8 +21,16 @@ if [[ "$COMMAND_LC" =~ (--repo|-r)[[:space:]]*grafana/grafana ]] || [[ "$COMMAND
   targets_upstream="true"
 fi
 
+# Allowed write targets for demo work: the demo fork (fieldsphere/grafana), the
+# Bugbot demo repos (fieldsphere/kev-grafana, anysphere/kev-grafana), and the
+# personal fork (kevdhan/grafana, kevdhan/kev-grafana). Accept --repo,
+# github.com URL, bare owner/repo, or repos/OWNER/REPO API-path forms.
+# Writes to grafana/grafana remain blocked.
 targets_fork_explicit="false"
-if [[ "$COMMAND_LC" =~ (--repo|-r)[[:space:]]*fieldsphere/grafana ]] || [[ "$COMMAND_LC" =~ github\.com/fieldsphere/grafana ]]; then
+if [[ "$COMMAND_LC" =~ (--repo|-r)[[:space:]]*(fieldsphere|kevdhan|anysphere|internalsphere)/(kev-)?grafana ]] \
+   || [[ "$COMMAND_LC" =~ github\.com/(fieldsphere|kevdhan|anysphere|internalsphere)/(kev-)?grafana ]] \
+   || [[ "$COMMAND_LC" =~ repos/(fieldsphere|kevdhan|anysphere|internalsphere)/(kev-)?grafana ]] \
+   || [[ "$COMMAND_LC" =~ (^|[[:space:]])(fieldsphere|kevdhan|anysphere|internalsphere)/(kev-)?grafana([[:space:]]|$) ]]; then
   targets_fork_explicit="true"
 fi
 

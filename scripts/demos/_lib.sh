@@ -564,7 +564,9 @@ EOF
 demo_commit_kit_to_base() {
   local base="$1"
   require_repo_root
-  git add -- scripts/demos .cursor/skills .cursor/rules/demo-safety.mdc .gitignore 2>/dev/null || true
+  git add -- scripts/demos .cursor/skills .cursor/agents .cursor/hooks \
+    .cursor/rules/demo-safety.mdc .cursor/rules/grafana-frontend-conventions.mdc \
+    .gitignore 2>/dev/null || true
   if git diff --cached --quiet; then
     demo_log "No demo-kit changes to commit"
     return 0

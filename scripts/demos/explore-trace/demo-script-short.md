@@ -39,18 +39,18 @@ Full talk track: [`demo-script.md`](./demo-script.md)
 
 ### Beat 1 — 2 a.m. page
 
-**Talk:** Explore = ad-hoc incident surface (not a dashboard). PagerDuty: checkout error burn. Usual 5xx query → **No data**. Empty state answers nothing.
+**Talk:** Explore = ad-hoc incident surface (not a dashboard). PagerDuty: checkout error burn. Filter the request metric for `5xx` → **No data** (errors here are 401s, not 500s). Empty state answers nothing.
 
-**Do:** `/explore` → Prometheus → run empty query → confirm centered No data.
+**Do:** `/explore` → Prometheus → run broken query → confirm centered No data.
 
 ```promql
-sum(rate(http_requests_total{job="checkout", status=~"5.."}[5m]))
+sum(rate(grafana_http_request_duration_seconds_count{status_code="500"}[5m]))
 ```
 
-Later reveal (401 spike):
+Fix — swap `500` → `401` (from the recommendation) to reveal the spike:
 
 ```promql
-sum by (status_code) (rate(grafana_http_request_duration_seconds_count[5m]))
+sum(rate(grafana_http_request_duration_seconds_count{status_code="401"}[5m]))
 ```
 
 Optional: Explain toggle = query only; Ask = codebase; Design = empty-state UX.

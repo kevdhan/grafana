@@ -1,0 +1,37 @@
+---
+description: Grafana frontend conventions (i18n, styling, types, tests) for public/app TypeScript/React code
+globs: public/app/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Grafana Frontend Conventions
+
+Apply these when editing Grafana frontend code under `public/app/`.
+
+## User-facing strings — always translate
+Never hardcode display text. Wrap it with i18n.
+
+```tsx
+// BAD
+<button>Run query</button>
+// GOOD
+<button>{t('explore.toolbar.run', 'Run query')}</button>
+// With inline markup:
+<Trans i18nKey="explore.toolbar.run">Run query</Trans>
+```
+When interpolating values that may contain `/` or other special chars, pass `interpolation: { escapeValue: false }`.
+
+## Styling — useStyles2, theme tokens
+```tsx
+const styles = useStyles2(getStyles);
+// const getStyles = (theme: GrafanaTheme2) => ({ wrap: css({ padding: theme.spacing(2) }) });
+```
+Use `theme.spacing`, `theme.colors`, etc. — no hardcoded px or hex, no inline `style={}`.
+
+## Types — no `as` / `any`
+Avoid `as SomeType` assertions and `any`. Narrow with type guards and the `in` operator (e.g. read an unknown prop via `'expr' in query`), not casts.
+
+## Components & tests
+- Function components with hooks (not class components).
+- Tests use React Testing Library; query by role/text, not implementation details.
+- Icons must use valid `IconName` values — invalid names log a warning and fail tests.

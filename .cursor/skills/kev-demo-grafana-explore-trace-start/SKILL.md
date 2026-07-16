@@ -5,9 +5,13 @@ description: >-
   up servers, runs the two Explore use cases). UC1 — Ask-mode trace of Grafana
   Explore Run → API → Go (optionally captured in a Cursor Canvas), then Agents
   Window + Design Mode to build an active-diagnosis empty state (ExploreNoDataDiagnostics.tsx + PanelDataErrorView.tsx) that queries the datasource.
-  UC2 — Ask traces the Explore graph series-limiting pipeline and Agent fixes a
-  dropped-series bug in limitSeries.ts + GraphContainer.tsx (only 1 line drawn
-  when the disclaimer says 20), turning a failing unit test green. Use when the user says
+  UC2 — a Customize-tab tour of the pre-planted Cursor primitives (rules advise,
+  hooks enforce; skills are on-demand procedures; MCP reaches external systems;
+  plugins bundle these), then the full bug arc: pull bug KHS-6 from Jira via MCP,
+  Ask-trace the series-limiting pipeline to limitSeries.ts, delegate the fix to the
+  plan-executor (Composer 2.5) subagent, turn limitSeries.test.ts green via the
+  run-frontend-test skill, review locally with /review-bugbot, then show GitHub
+  Bugbot (+ Autofix) on internalsphere/kev-grafana. Use when the user says
   start explore-trace demo, grafana explore demo, /kev-demo-grafana-explore-trace-start,
   or wants to begin the Ask + Design Mode + Agent Grafana demo. To tear the demo
   down afterward, use the companion skill /kev-demo-grafana-explore-trace-reset.
@@ -20,7 +24,7 @@ Starts (and runs) the **explore-trace** customer demo across **two Explore use c
 To tear it down afterward, use the companion skill **`/kev-demo-grafana-explore-trace-reset`**.
 
 - **UC1 — No data → diagnose & fix the query.** Ask maps the request path (capture it in a Cursor Canvas); Design Mode builds an *active-diagnosis* empty state (`ExploreNoDataDiagnostics.tsx` + `PanelDataErrorView.tsx`) that queries the datasource to explain why (metric "did you mean" + culprit label filter); one-click fix reveals a seeded 401 spike.
-- **UC2 — Data looks wrong → find & fix a bug.** Ask traces the graph series-limiting pipeline to `limitSeries.ts` (via `GraphContainer.tsx`); Agent fixes a dropped-series bug (only 1 line drawn when the disclaimer says 20) and turns a failing unit test green (planted, reversible demo artifact).
+- **UC2 — Data looks wrong → find & fix a bug (with the full Cursor toolchain).** Tour the pre-planted Cursor primitives in the **Customize** tab (rule / skill / hook / subagent / MCP), pull the bug from **Jira** (`KHS-6`) via MCP, Ask-trace the graph series-limiting pipeline to `limitSeries.ts` (via `GraphContainer.tsx`), **delegate** the one-line fix to the `plan-executor` (Composer 2.5) subagent, turn `limitSeries.test.ts` green with the `run-frontend-test` skill, then review it locally with `/review-bugbot` and "flash" GitHub **Bugbot** (+ Autofix) on `internalsphere/kev-grafana`. The dropped-series bug (only 1 line drawn when the disclaimer says 20) is a planted, reversible demo artifact.
 
 Full talk track: `scripts/demos/explore-trace/demo-script.md`. Live cheat sheet: `demo-script-short.md`.
 
@@ -50,6 +54,8 @@ Always run setup at the start and reset at the end of a customer session.
 5. Do **not** change `runQueries`, the Explore query pipeline, `pkg/api/ds_query.go` / `pkg/api/api.go`, dashboard "No data" behavior, auth, or alerting in the live demo.
 6. Keep empty-state copy professional (no jokes / customer-name hardcoding).
 7. If `.demo-state` exists for another demo, confirm before switching.
+8. The Cursor primitives (`.cursor/rules/grafana-frontend-conventions.mdc`, `.cursor/skills/run-frontend-test/`, `.cursor/hooks/` + `hooks.json`, `.cursor/agents/plan-executor.md`) are **git-tracked kit** — present automatically on the demo branch. Do **not** recreate, re-plant, or discard them; reset preserves them via `--save-kit`.
+9. Mutating `gh` is gated by `.cursor/hooks/enforce-fieldsphere-gh.sh`: writes are allowed to `fieldsphere/grafana`, `fieldsphere/kev-grafana`, `kevdhan/grafana`(+`kev-`), `anysphere/kev-grafana`, and `internalsphere/kev-grafana`; writes to `grafana/grafana` stay blocked. Use `internalsphere/kev-grafana` for the Bugbot beat.
 
 ## Cursor sandbox (read first)
 
@@ -155,6 +161,7 @@ That **records server + traffic pids** (`.demo-backend.pid` / `.demo-frontend.pi
 | Traffic generator | **Agent durable shell** + `demo_ensure_traffic` / `demo_record_traffic_pid` | Setup only verifies/records; soft_curl survives Grafana blips |
 | Prometheus vs TestData | `demo_ensure_prometheus` | Warns on sandboxed Docker socket |
 | Readiness summary | `demo_print_readiness` | Agent parses this; don't reinvent checks |
+| UC2 Cursor primitives (rule / skill / hook / subagent) | **git-tracked kit** (not a per-run plant) | Present automatically on the demo branch; preserved by reset `--save-kit` — don't recreate |
 
 ### Data source notes (Prometheus preferred)
 
@@ -239,39 +246,104 @@ Call out Design Mode caveats from NOTES (Agents Window browser; source edit not 
 - Fix the query to `sum by (status_code) (rate(grafana_http_request_duration_seconds_count[5m]))` and watch the graph fill in with the seeded **401 spike**
 - Optional Ask: which file changed for the empty state? → `PanelDataErrorView.tsx`
 
-## Use Case 2 — Data looks wrong → find & fix a bug with Cursor
+## Use Case 2 — Data looks wrong → find & fix a bug with the full Cursor toolchain
 
-### 6b. Ask trace + Agent fix (planted, reversible bug)
+UC2 shows how a team **customizes** Cursor and runs a real bug end-to-end. A safe, reversible bug lives on `demo/explore-trace` (discarded by reset). **Say it's an intentional demo artifact.** The arc:
 
-A safe, reversible bug lives on `demo/explore-trace` (discarded by reset). **Say it's an intentional demo artifact.**
+> Jira MCP (`KHS-6` fuzzy prompt) → Ask-trace to `limitSeries.ts` → delegate the fix to `plan-executor` (Composer) → `limitSeries.test.ts` green via the `run-frontend-test` skill → `/review-bugbot` locally → GitHub Bugbot (+ Autofix) on `internalsphere/kev-grafana`.
+
+### 6b. Customize tour — the Cursor primitives (pre-planted kit)
+
+Open **Cursor Settings → Customize** and frame the primitives as a spectrum of control. All of these are **git-tracked kit** already present on the branch (not planted per-run):
+
+**Framing:** *rules advise, hooks enforce; skills are on-demand procedures; MCP reaches external systems; plugins bundle these together.*
+
+| Primitive | Artifact | What it does in this demo |
+|-----------|----------|---------------------------|
+| **Rule** (advises) | `.cursor/rules/grafana-frontend-conventions.mdc` | Steers frontend edits: i18n via `t()`/`Trans`, `useStyles2` + theme tokens, no `as`/`any`, RTL tests, valid `IconName` |
+| **Skill** (on-demand procedure) | `.cursor/skills/run-frontend-test/SKILL.md` | Encodes the correct single-test command for this repo: `node .yarn/releases/yarn-*.cjs jest <file> --watchAll=false` |
+| **Hook** (enforces) | `.cursor/hooks/format-frontend.sh` (`afterFileEdit`) | Auto-runs Prettier on edited `public/app` files. Registered in `.cursor/hooks.json` alongside `enforce-fieldsphere-gh.sh` (the `beforeShellExecution` gh guard) |
+| **Subagent** (delegated work) | `.cursor/agents/plan-executor.md` (Composer 2.5) | The writer the parent delegates the fix to (see 6e) |
+| **MCP** (external systems) | Jira MCP → `fe-anysphere-demo` site | Sources the bug ticket `KHS-6` (see 6c) |
+
+**Talk:** “This is how a team makes Cursor *theirs* — the same conventions, guardrails, and procedures apply to every engineer and every agent run.”
+
+### 6c. Source the bug from Jira (MCP, fuzzy retrieval)
+
+The bug report lives in Jira — project **KevinHan-Space** (key `KHS`), ticket **`KHS-6`**, on the `fe-anysphere-demo` site. It persists across runs (**reusable — only recreate if missing**).
+
+Use a **fuzzy prompt** that names no ticket key and no file, so the agent has to search Jira via MCP and correlate the report to code:
+
+> There's a bug reported in Jira about our Grafana Explore graphs — something about a time-series panel only drawing one line even though way more series come back and the disclaimer says it's showing 20. Find the ticket, read it, then locate the responsible code in this repo.
+
+Expected: the agent queries Jira via MCP, lands on `KHS-6`, and pivots into the codebase toward the series-limiting path.
+
+### 6d. Reproduce + Ask-trace to the bug (Canvas)
 
 1. In Explore (Prometheus), query a metric that **returns many series**: `prometheus_http_requests_total` (returns **56 series** here).
-2. The graph draws **only 1 line**, while the disclaimer above it reads *"⚠ Showing only 20 series — Show all 56"*. The mismatch (claims 20, draws 1) is the obvious "something's broken" tell.
+2. The graph draws **only 1 line**, while the disclaimer above it reads *"⚠ Showing only 20 series — Show all 56"*. The mismatch (claims 20, draws 1) is the obvious "something's broken" tell that matches the ticket.
 3. Use Cursor **Ask** to trace the series-limiting pipeline **and** generate a shareable diagram. Prompt:
    > In Grafana Explore the graph renders only 1 series even though the query returns 56 and the disclaimer says "Showing only 20 series." Trace the series-limiting pipeline from the query result through `GraphContainer` to the exact function that caps the series, and identify the bug. Then generate a Cursor Canvas with a visual architecture diagram of the whole path — user query → `runQueries`/`runRequest` → `POST /api/ds/query` → Go handler → data frames back → `GraphContainer` `slicedData` → `limitSeriesForDisplay` → `PanelRenderer`/graph — and **highlight the node where the bug is** (the series cap).
 
    Expected: Ask lands on `public/app/features/explore/Graph/limitSeries.ts` — `limitSeriesForDisplay` caps at a hardcoded **`1`** instead of `MAX_NUMBER_OF_TIME_SERIES` (wired via `GraphContainer.tsx`; the `LimitedDataDisclaimer` still uses the real constant, hence "20 shown, 1 drawn"). The Canvas renders the flow with the `limitSeries.ts` node flagged as the fault.
-4. **Use the failing unit test as the reproducible artifact** (normal Jest test, runs in the terminal):
+4. **Show the failing unit test as the reproducible artifact** — run it via the `run-frontend-test` skill:
    ```sh
-   yarn jest public/app/features/explore/Graph/limitSeries.test.ts --watchAll=false
+   node .yarn/releases/yarn-*.cjs jest public/app/features/explore/Graph/limitSeries.test.ts --watchAll=false
    ```
-   (Currently **2 failed, 1 passed** — `Received length: 1` vs `Expected length: 20`.) Optionally run it yourself to show RED first; the stronger move is to let the **Agent** reproduce → fix → re-run green autonomously.
-5. Cursor **Agent** prompt — fix + **validate with a unit test AND a visual (headless-browser) test**: *"`limitSeriesForDisplay` caps the series at 1 instead of `MAX_NUMBER_OF_TIME_SERIES`. Fix it, then (1) run `limitSeries.test.ts` until green, and (2) run a visual test with the Playwright harness `scripts/demos/explore-trace/shot.mjs` against `prometheus_http_requests_total` and confirm the graph renders ~20 series instead of 1."*
-   - Visual test (Agent runs it, **unsandboxed**): `PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright" EXPR='prometheus_http_requests_total' OUT='scripts/demos/explore-trace/.shot-uc2-after.png' node scripts/demos/explore-trace/shot.mjs`
-   - Result: cap becomes `MAX_NUMBER_OF_TIME_SERIES`, unit test **green**, and the screenshot shows ~20 series (matching the disclaimer) — two forms of proof (test + rendered screenshot).
+   (Currently **2 failed, 1 passed** — `Received length: 1` vs `Expected length: 20`.) Optionally show RED first; the stronger move is to **delegate** the fix and let the loop go green autonomously (6e).
 
-**Talk:** two Cursor modes across two use cases — Ask/Design to understand & improve UX (UC1), Agent + a failing test to root-cause & fix a real bug (UC2).
+### 6e. Delegate the fix to the plan-executor subagent (Composer)
+
+Don't have the frontier model type the fix — **delegate** it. The parent (a frontier reasoning model) plans; `plan-executor` (Composer 2.5, fast) implements against that plan.
+
+**Model-selection talk track:**
+
+> “The frontier model is best at *planning* — reading the ticket, tracing the pipeline, deciding the fix. Once the plan is set, the mechanical edit is cheap: I hand it to a fast **Composer** subagent. Delegating to a subagent also gives it an **isolated context window** — it gets exactly the plan and the target files instead of re-porting this whole transcript, so it stays fast and focused.”
+
+**Ready delegation prompt (parent → `plan-executor`):**
+
+> **Plan:** `limitSeriesForDisplay` in `public/app/features/explore/Graph/limitSeries.ts` caps the returned series at a hardcoded `1` instead of the module constant `MAX_NUMBER_OF_TIME_SERIES`. That's the whole bug (the disclaimer already uses the real constant, and `GraphContainer.tsx` consumes the capped output).
+> **Do:** change the cap `1` → `MAX_NUMBER_OF_TIME_SERIES`. Do not touch anything else.
+> **Conventions:** honor `.cursor/rules/grafana-frontend-conventions.mdc`; no `as`/`any`; keep scope to this one function.
+> **Validate:** run the `run-frontend-test` skill on `public/app/features/explore/Graph/limitSeries.test.ts` until green (`node .yarn/releases/yarn-*.cjs jest public/app/features/explore/Graph/limitSeries.test.ts --watchAll=false`).
+> **Report:** files changed + final test counts.
+
+Expected: cap becomes `MAX_NUMBER_OF_TIME_SERIES`, `limitSeries.test.ts` **green**, the graph now draws ~20 series (matching the disclaimer). The `format-frontend.sh` hook Prettier-formats the edit automatically.
+
+*(Optional visual proof — the parent or subagent can run the Playwright harness unsandboxed: `PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright" EXPR='prometheus_http_requests_total' OUT='scripts/demos/explore-trace/.shot-uc2-after.png' node scripts/demos/explore-trace/shot.mjs` → screenshot shows ~20 series.)*
+
+### 6f. Review — `/review-bugbot` locally, then flash the GitHub PR
+
+**Shift-left review on the real local fix:** run `/review-bugbot` against the local diff to show the same reviewer that gates PRs runs *before* the code ever leaves the branch.
+
+Then **"flash" the GitHub PR** to show the same reviewer runs on every PR at team scale (a representative example — **not** the same diff as the local fix):
+
+- **Repo:** `internalsphere/kev-grafana` (Bugbot enabled **org-wide**; trigger with a **`bugbot run`** PR comment). Bugbot surfaces a **High-severity** finding plus an **Autofix / "Fix in Cursor"**.
+- **Reusable PR:** `internalsphere/kev-grafana#2` — a feature-branch PR (never merged). The org ruleset only gates **merging `main`**, so an unmerged feature-branch PR is all the demo needs.
+- **Why this repo (hard-won lesson):** `fieldsphere` writes are SAML/OAuth-app blocked; `anysphere` reports *"Bugbot disabled for this repository"* (needs a per-repo toggle); personal `kevdhan` repos can't enable Bugbot. **`internalsphere/kev-grafana` is the working repo.**
+
+**Talk:** “Same reviewer, two moments — shift-left on my branch before I push, and automatically on every PR for the whole team.”
+
+**Talk (whole demo):** Ask/Design to understand & improve UX (UC1); then the full toolchain — MCP-sourced ticket, delegated Composer fix, test-green, and layered review — to root-cause & ship a real bug fix (UC2).
 
 ## Wrap-up
 
-### 7. Reset (teardown is a separate skill)
+### 7. Recap + what's next (201 preview)
+
+**Recap the arc:** Explore incident → Ask trace (+ Canvas) → Design Mode multi-file empty state (UC1); customized primitives → Jira MCP ticket → delegated Composer fix → green test → layered Bugbot review (UC2). One running app, the whole Cursor surface.
+
+**201 preview (tease, don't demo):** the **CLI** for headless/scripted runs, **Cloud Agents** for offloaded parallel work, **Automations** for scheduled/triggered agent runs, **team-scale Bugbot** across every PR, deeper **subagent orchestration**, and a growing **MCP / rules** library the whole team shares.
+
+### 8. Reset (teardown is a separate skill)
 
 When the session ends, tear down with the companion skill **`/kev-demo-grafana-explore-trace-reset`** (it drives `./scripts/demos/reset.sh`, with `--save-kit` to preserve kit work and `--stop-deps` for a full cold teardown). Quick reference:
 
 ```sh
 ./scripts/demos/reset.sh            # base branch, delete demo branch, clear state
-./scripts/demos/reset.sh --save-kit # + commit kit to base (local), discard product changes
+./scripts/demos/reset.sh --save-kit # + commit kit (incl. new primitives) to base (local), discard product changes
 ```
+
+Reset preserves the Cursor primitives (rule / skill / hook / subagent) via `--save-kit` and leaves the **external** artifacts (Jira `KHS-6`, the `internalsphere/kev-grafana` repo + PR #2) untouched — they're reusable across runs.
 
 ## Safe change constraints
 
@@ -285,5 +357,8 @@ When the session ends, tear down with the companion skill **`/kev-demo-grafana-e
 ## Related
 
 - Orchestrator: `/kev-demo-kit` (`.cursor/skills/kev-demo-kit/SKILL.md`)
+- Teardown / health: `/kev-demo-grafana-explore-trace-reset` · `/kev-demo-grafana-explore-trace-health`
 - Servers: `start-dev-server` / `dev-server-hot-reload`
+- UC2 kit primitives: `.cursor/rules/grafana-frontend-conventions.mdc` · `.cursor/skills/run-frontend-test/` · `.cursor/hooks/` (+ `.cursor/hooks.json`) · `.cursor/agents/plan-executor.md`
+- Review: `/review-bugbot` (local) · GitHub Bugbot on `internalsphere/kev-grafana` (PR #2)
 - Notes: `scripts/demos/explore-trace/demo-script.md` · cheat sheet: `demo-script-short.md`

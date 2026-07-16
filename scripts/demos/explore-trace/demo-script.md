@@ -95,7 +95,7 @@ Same running app for both: Ask/Design for UX understanding (UC1), Agent + test f
 
 ## Use Case 1 — No data → diagnose & fix the query
 
-On-call is paged for errors, runs the usual 5xx query, hits **No data** (metric renamed after deploy). Diagnostic empty state does triage; fixing to a real metric reveals the seeded **401 spike**.
+On-call is paged for errors, filters the request metric for `5xx`, hits **No data** — because in this system the errors are **401s**, not 500s. The diagnostic empty state lists the status codes that actually exist; swapping `500` → `401` (straight from the recommendation) reveals the seeded **401 spike**.
 
 ### Beat 1 — Product context: the 2 a.m. page (~4 min)
 
@@ -103,19 +103,19 @@ On-call is paged for errors, runs the usual 5xx query, hits **No data** (metric 
 
 **On-call story (say while you drive):**
 
-> **2:04 a.m.** PagerDuty: `checkout-api — error ratio > 5% (SLO burn 14.4x)`. I open Explore → Prometheus → my usual 5xx query → **“No data.”**
+> **2:04 a.m.** PagerDuty: `checkout-api — error ratio > 5% (SLO burn 14.4x)`. I open Explore → Prometheus → filter my request metric for `5xx` → **“No data.”**
 >
-> 2 a.m. math: wrong query? OTel rename (`http_requests_total` → something else)? `status` vs `http_status_code`? `job` vs `service`? Wrong tenant? Exporter dead (`absent()`)?
+> 2 a.m. math: wrong error code (`500` vs `4xx`)? `status` vs `status_code`? `job` vs `service`? Wrong tenant? Exporter dead (`absent()`)?
 >
 > Empty state answers **none** of that — grey “No data,” dead center. That’s a 2-minute fix vs a 40-minute goose chase.
 
 
-| Detail                               | Why it sells                 |
-| ------------------------------------ | ---------------------------- |
-| SLO burn-rate alert                  | How teams actually page      |
-| `http_requests_total{status=~"5.."}` | Canonical RED error query    |
-| OTel rename / label drift            | Common post-deploy “No data” |
-| `job` vs `service`                   | #1 self-inflicted miss       |
+| Detail                                | Why it sells                     |
+| ------------------------------------- | -------------------------------- |
+| SLO burn-rate alert                   | How teams actually page          |
+| Filtering for `status_code="500"`     | Canonical RED error query        |
+| Errors are actually `401`             | Common wrong-value “No data”     |
+| Recommendation lists valid values     | Fix is copy-paste, not guesswork |
 
 
 Beat 4 builds an empty state that **checks** these against the datasource — not tip lists.
@@ -123,16 +123,16 @@ Beat 4 builds an empty state that **checks** these against the datasource — no
 #### Drive the empty state (Prometheus)
 
 1. Open `/explore` → **Prometheus**
-2. Empty query (metric doesn’t exist here; no `checkout` job):
+2. Broken query (valid metric, wrong error code — `500` doesn’t exist here):
   ```promql
-   sum(rate(http_requests_total{job="checkout", status=~"5.."}[5m]))
+   sum(rate(grafana_http_request_duration_seconds_count{status_code="500"}[5m]))
   ```
-3. After Beat 4: diagnosis names missing metric + bad label filter → **Copy fixed query**
-4. Reveal query (seeded **401 spike**):
+3. After Beat 4: diagnosis says *No series match `status_code="500"`* and lists the values that exist (`-1, 200, 302, 304, 401`).
+4. Fix — swap `500` → `401` (straight from the recommendation) to reveal the seeded **401 spike**:
   ```promql
-   sum by (status_code) (rate(grafana_http_request_duration_seconds_count[5m]))
+   sum(rate(grafana_http_request_duration_seconds_count{status_code="401"}[5m]))
   ```
-5. Optional: run `up` first (graph), then the empty query (dead end).
+5. Optional: run `up` first (graph), then the broken query (dead end).
 
 **TestData fallback:** scenario **No Data Points** → `NoData` component (different from graph empty state). Ask path still works; diagnosis upgrade needs Prometheus.
 
@@ -208,7 +208,7 @@ Switch to **Ask**. Prompts:
   > 4. Echo time range + failed query (Copy). Fallback: short checklist.
   >
   > **Constraints:** i18n via `t()`; no TypeScript `as` assertions; small dedicated component; don't change dashboard/panel-editor behavior.
-4. **Produces:** `ExploreNoDataDiagnostics.tsx` + Explore-scoped `PanelDataErrorView.tsx` + request threading. Demo result: missing `http_requests_total` + `job="checkout"` matches nothing.
+4. **Produces:** `ExploreNoDataDiagnostics.tsx` + Explore-scoped `PanelDataErrorView.tsx` + request threading. Demo result: `status_code="500"` matches no series; diagnosis lists the codes that exist (incl. `401`).
 5. Prefer user-driven selection; agent implements across files.
 
 **Talk:** “Visual selection → multi-file feature: empty state calls Prometheus’s label API — metric missing, which filter failed, fix one click away.”
@@ -296,7 +296,7 @@ Confirm: base branch, `.demo-state` gone, `demo/explore-trace` deleted, traffic 
 
 - Start skill → this script; reset skill tears down
 - Traffic keeps 401/404 spike fresh on `grafana_http_request_duration_seconds_count`
-- **UC1:** Ask map (+ Canvas); Design Mode → active diagnosis via HMR; Copy fixed query → 401 spike
+- **UC1:** Ask map (+ Canvas); Design Mode → active diagnosis via HMR; swap `status_code` `500` → `401` → 401 spike
 - **UC2:** Ask → `limitSeries.ts`; Agent fix → test green → ~20 series match disclaimer
 - Reset → clean base, planted bug gone
 

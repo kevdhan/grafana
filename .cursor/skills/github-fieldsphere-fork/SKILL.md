@@ -8,6 +8,7 @@ description: Ensure GitHub context, issues, and pull request work targets the fi
 ## Instructions
 
 - Always use `fieldsphere/grafana` for GitHub queries and operations (issues, PRs, commits, code search, and repo context).
+- Exception: the Bugbot-on-PR demo uses `fieldsphere/kev-grafana` as a dedicated sandbox. Write actions (repo/branch/PR creation) may target `fieldsphere/kev-grafana`; the `gh` safety hook allows it alongside `fieldsphere/grafana`.
 - For mutating `gh` CLI commands (for example `pr create`, `pr edit`, `pr merge`, issue/release writes), always pass `--repo fieldsphere/grafana`.
 - For read-only/sync operations, upstream `grafana/grafana` may be used when explicitly needed (for example comparing, listing, syncing, or fetching context), but never as the target for write actions.
 - For GitHub MCP tools, set owner to `fieldsphere` and repo to `grafana` (or include this in the tool query when required).

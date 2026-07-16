@@ -82,6 +82,14 @@ public/css/*.min.css
 !.cursor/rules/
 .cursor/rules/*
 !.cursor/rules/demo-safety.mdc
+# Field Engineer demo kit convention rule (shown in the Customize tab)
+!.cursor/rules/grafana-frontend-conventions.mdc
+# Field Engineer demo kit subagents (reusable across demo runs)
+!.cursor/agents/
+!.cursor/agents/**
+# Field Engineer demo kit hooks (reusable across demo runs)
+!.cursor/hooks/
+!.cursor/hooks/**
 .devcontainer/
 .claude/
 

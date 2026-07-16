@@ -8,14 +8,14 @@
 // Env overrides:
 //   BASE_URL   (default http://localhost:3000)
 //   DS_UID     (default demo-explore-trace-prom)
-//   EXPR       (default the "checkout" no-data query)
+//   EXPR       (default the status_code="500" no-data query)
 //   OUT        (default scripts/demos/explore-trace/.shot.png)
 //   RANGE_FROM (default now-1h)
 import { chromium } from '@playwright/test';
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const DS_UID = process.env.DS_UID || 'demo-explore-trace-prom';
-const EXPR = process.env.EXPR || 'sum(rate(http_requests_total{job="checkout", status=~"5.."}[5m]))';
+const EXPR = process.env.EXPR || 'sum(rate(grafana_http_request_duration_seconds_count{status_code="500"}[5m]))';
 const OUT = process.env.OUT || 'scripts/demos/explore-trace/.shot.png';
 const RANGE_FROM = process.env.RANGE_FROM || 'now-1h';
 
